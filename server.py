@@ -16,6 +16,7 @@ from routes.auth import router as auth_router
 from routes.subjects import router as subjects_router
 from routes.documents import router as documents_router
 from routes.sessions import router as sessions_router
+from routes.chat import router as chat_router
 
 # Load environment variables
 load_dotenv()
@@ -141,6 +142,7 @@ app.include_router(auth_router)
 app.include_router(subjects_router)
 app.include_router(documents_router)
 app.include_router(sessions_router)
+app.include_router(chat_router)
 
 
 @app.get("/")

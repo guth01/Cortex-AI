@@ -41,6 +41,7 @@ pydantic==2.5.3
 pydantic-settings==2.1.0
 httpx==0.26.0
 aiofiles==23.2.1
+requests>=2.31.0      # Wikipedia API calls
 
 # Optional (DeepL for translation)
 deepl==1.17.0

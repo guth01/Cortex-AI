@@ -11,7 +11,7 @@ db/
 # ChromaDB storage
 chroma_db/
 *.db
-upload/
+uploads/
 # IDE
 .vscode/
 .idea/
