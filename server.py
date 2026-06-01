@@ -17,6 +17,7 @@ from routes.subjects import router as subjects_router
 from routes.documents import router as documents_router
 from routes.sessions import router as sessions_router
 from routes.chat import router as chat_router
+from routes.google_oauth import router as google_oauth_router
 
 # Load environment variables
 load_dotenv()
@@ -78,6 +79,8 @@ async def lifespan(app: FastAPI):
         print("  ✓ Compound index on documents.user_id + subject_id")
         await database.flashcards.create_index([("user_id", 1), ("subject_id", 1)])
         print("  ✓ Compound index on flashcards.user_id + subject_id")
+        await database.flashcards.create_index([("user_id", 1), ("due_date", 1)])
+        print("  ✓ Compound index on flashcards.user_id + due_date (for spaced repetition)")
 
         # Create uploads directory
         print("\n📁 Setting up file storage...")
@@ -139,6 +142,7 @@ app.add_middleware(
 
 # Register route modules
 app.include_router(auth_router)
+app.include_router(google_oauth_router)   # Day 5: Google OAuth
 app.include_router(subjects_router)
 app.include_router(documents_router)
 app.include_router(sessions_router)

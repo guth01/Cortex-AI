@@ -118,10 +118,47 @@ class FlashcardResponse(BaseModel):
     subject_id: str
     question: str
     answer: str
+    card_type: str = "concept"
+    topic: str = ""
     created_at: datetime
-    
+
     # SM-2 Algorithm fields
     easiness_factor: float = 2.5
     interval: int = 0
     repetitions: int = 0
     next_review: datetime
+
+
+# ============= DAY 5 — GOOGLE CALENDAR + PLANNING MODELS =============
+
+class GoogleOAuthStatus(BaseModel):
+    connected: bool
+    google_email: Optional[str] = None
+    connected_at: Optional[datetime] = None
+
+
+class StudyPlanEvent(BaseModel):
+    """A single proposed study session in a plan."""
+    subject: str
+    topic: str
+    date: str                   # YYYY-MM-DD
+    duration_minutes: int
+    coverage_level: str         # well_covered | shallow | missing
+
+
+class StudyPlanResponse(BaseModel):
+    proposed_events: List[StudyPlanEvent]
+    gap_analysis: dict
+    total_sessions: int
+    exam_date: str
+
+
+class ConfirmPlanRequest(BaseModel):
+    action: str = "confirm"     # "confirm" or "reject"
+
+
+class ConfirmPlanResponse(BaseModel):
+    status: str                 # "confirmed" | "rejected"
+    events_created: int = 0
+    calendar_links: List[str] = []
+    message: str = ""

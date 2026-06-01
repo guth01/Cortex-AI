@@ -44,4 +44,4 @@ aiofiles==23.2.1
 requests>=2.31.0      # Wikipedia API calls
 
 # Optional (DeepL for translation)
-deepl==1.17.0
+# deepl==1.17.0

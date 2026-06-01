@@ -34,3 +34,7 @@ class AgentState(TypedDict):
     # Calendar (Day 5 — wired later, kept in state today)
     awaiting_confirmation: bool
     proposed_calendar_events: list
+
+    # Study planning context — extracted from user message by StudyPlanBuilderNode
+    exam_date: Optional[str]      # e.g. "2025-04-15" or "April 15"
+    subject_name: Optional[str]   # Denormalized subject name (for tools that need it as string)
