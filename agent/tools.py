@@ -62,9 +62,9 @@ def search_notes(query: str, session_id: str, top_k: int = 5) -> dict:
                 "score": round(float(score), 4),
             })
 
-        # Confidence = average score of top-3 results (or fewer if not enough)
-        top3_scores = [c["score"] for c in chunks[:3]]
-        confidence = sum(top3_scores) / len(top3_scores) if top3_scores else 0.0
+        # Confidence = score of the single best matching chunk
+        # (Averaging top-3 penalizes specific queries where only 1 chunk is relevant)
+        confidence = chunks[0]["score"] if chunks else 0.0
 
         print(f"[TOOL:search_notes] query='{query}' -> {len(chunks)} chunks, confidence={confidence:.3f}")
         return {
@@ -697,10 +697,10 @@ Generate {num_cards} flashcards on "{topic}" based on the notes above."""
             "card_type": card.get("card_type", "concept"),
             "created_at": now,
             # SM-2 initial values
-            "ease_factor": 2.5,
-            "interval_days": 1,
+            "easiness_factor": 2.5,
+            "interval": 1,
             "repetitions": 0,
-            "due_date": tomorrow,
+            "next_review": tomorrow,
         }
         card_docs.append(doc)
 

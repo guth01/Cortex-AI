@@ -56,8 +56,28 @@ def _get_oauth_config() -> dict:
 
 
 # ============================================================================
-# GET /auth/google  — initiate OAuth flow
+# POST /auth/google/url  — get OAuth URL for frontend
+# GET /auth/google  — initiate OAuth flow (legacy/direct redirect)
 # ============================================================================
+
+@router.post("/google/url")
+async def get_google_oauth_url(
+    current_user: dict = Depends(get_current_user),
+):
+    """Return the Google OAuth consent URL for the frontend to redirect to."""
+    cfg = _get_oauth_config()
+    params = {
+        "client_id": cfg["client_id"],
+        "redirect_uri": cfg["redirect_uri"],
+        "response_type": "code",
+        "scope": SCOPES,
+        "access_type": "offline",
+        "prompt": "consent",
+        "state": current_user["id"],
+    }
+    consent_url = f"{GOOGLE_AUTH_URL}?{urlencode(params)}"
+    return {"url": consent_url}
+
 
 @router.get("/google")
 async def google_oauth_initiate(

@@ -23,6 +23,7 @@ import os
 import re
 from typing import Literal
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from agent.state import AgentState
@@ -41,14 +42,40 @@ from agent.tools import (
 # Shared LLM instance (Gemini)
 # ============================================================================
 
+import itertools
+
+_api_key_cycle = None
+
 def _get_llm(temperature: float = 0.3) -> ChatGoogleGenerativeAI:
-    """Get a configured Gemini LLM instance."""
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        raise RuntimeError("GEMINI_API_KEY not set in environment")
+    """Get a configured Gemini LLM instance, rotating through keys if multiple are provided."""
+    global _api_key_cycle
+    
+    if _api_key_cycle is None:
+        keys_str = os.getenv("GEMINI_API_KEYS")
+        if keys_str:
+            keys = [k.strip() for k in keys_str.split(",") if k.strip()]
+        else:
+            single_key = os.getenv("GEMINI_API_KEY")
+            keys = [single_key] if single_key else []
+            
+        if not keys:
+            raise RuntimeError("GEMINI_API_KEY or GEMINI_API_KEYS not set in environment")
+            
+        _api_key_cycle = itertools.cycle(keys)
+
+    api_key = next(_api_key_cycle)
+    
     return ChatGoogleGenerativeAI(
         model="gemini-2.5-flash",
         google_api_key=api_key,
+        temperature=temperature,
+    )
+
+
+def _get_groq_llm(temperature: float = 0.3) -> ChatGroq:
+    """Get a configured Groq LLM instance for agentic tasks."""
+    return ChatGroq(
+        model="llama-3.3-70b-versatile",
         temperature=temperature,
     )
 
@@ -62,7 +89,7 @@ ROUTER_SYSTEM_PROMPT = """You are an intent classifier for a student study assis
 Classify the user's message into exactly ONE of these intents:
 - rag_query       → asking about content from their notes/documents (explain, what is, how does, etc.)
 - content_generation → asking to create study material (flashcards, quiz, summary, mind map, revision sheet, etc.)
-- study_planning  → asking about schedules, study plans, what to study, time management, exam prep
+- study_planning  → asking about schedules, study plans, what to study, time management, exam prep, or knowledge gap analysis (e.g. what am I missing, analyze my notes for gaps)
 - session_end     → wants to end the session (goodbye, done, quit, stop, finish)
 - chitchat        → casual conversation, greetings, unrelated to studying
 
@@ -71,6 +98,7 @@ Examples:
   User: "explain virtual memory" → rag_query
   User: "make me 10 flashcards on recursion" → content_generation
   User: "create a study plan for my exam" → study_planning
+  User: "what topics am I missing in my notes?" → study_planning
   User: "plan my OS revision, exam is April 15" → study_planning
   User: "generate a revision sheet for databases" → content_generation
   User: "hi there!" → chitchat
@@ -84,7 +112,7 @@ async def router_node(state: AgentState) -> dict:
     """
     print("[NODE:router] Classifying intent...")
 
-    llm = _get_llm(temperature=0.0)  # deterministic classification
+    llm = _get_groq_llm(temperature=0.0)  # deterministic classification
 
     last_message = state["messages"][-1]["content"] if state["messages"] else ""
 
@@ -107,7 +135,7 @@ async def router_node(state: AgentState) -> dict:
 # RAGNode — semantic search over session's ChromaDB
 # ============================================================================
 
-CONFIDENCE_THRESHOLD = 0.45  # below this → fall through to Wikipedia
+CONFIDENCE_THRESHOLD = 0.20  # below this → fall through to Wikipedia
 
 
 async def rag_node(state: AgentState) -> dict:
@@ -147,7 +175,7 @@ async def wikipedia_node(state: AgentState) -> dict:
     last_message = state["messages"][-1]["content"] if state["messages"] else ""
 
     # Ask Gemini to extract just the topic (quick call)
-    llm = _get_llm(temperature=0.0)
+    llm = _get_groq_llm(temperature=0.0)
     topic_response = await llm.ainvoke([
         SystemMessage(content="Extract the core topic being asked about. Return ONLY the topic name, 1-5 words, no punctuation."),
         HumanMessage(content=last_message),
@@ -189,7 +217,7 @@ async def planner_node(state: AgentState) -> dict:
     """
     print("[NODE:planner] Building execution plan...")
 
-    llm = _get_llm(temperature=0.2)
+    llm = _get_groq_llm(temperature=0.2)
     last_message = state["messages"][-1]["content"] if state["messages"] else ""
 
     response = await llm.ainvoke([
@@ -277,7 +305,7 @@ async def study_plan_builder_node(state: AgentState) -> dict:
     print("[NODE:study_plan_builder] Building study plan...")
 
     import json as _json
-    llm = _get_llm(temperature=0.0)
+    llm = _get_groq_llm(temperature=0.0)
     last_message = state["messages"][-1]["content"] if state["messages"] else ""
 
     # Step 1: Extract exam date + subject from the message
@@ -420,7 +448,7 @@ async def flashcard_generator_node(state: AgentState) -> dict:
     from routes.deps import get_db
     db = get_db()
 
-    llm = _get_llm(temperature=0.2)
+    llm = _get_groq_llm(temperature=0.2)
     last_message = state["messages"][-1]["content"] if state["messages"] else ""
 
     # Step 1: Extract topic + num_cards

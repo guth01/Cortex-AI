@@ -18,6 +18,7 @@ from routes.documents import router as documents_router
 from routes.sessions import router as sessions_router
 from routes.chat import router as chat_router
 from routes.google_oauth import router as google_oauth_router
+from routes.flashcards import router as flashcards_router
 
 # Load environment variables
 load_dotenv()
@@ -87,10 +88,8 @@ async def lifespan(app: FastAPI):
         UPLOAD_DIR.mkdir(exist_ok=True)
         print(f"  ✓ Upload directory ready: {UPLOAD_DIR.absolute()}")
 
-        # Load embedding model
-        print("\n🤖 Loading embedding model...")
-        print("  (First run will download ~90MB - this is normal)")
-        load_embedder_model()
+        # Embedder is now lazy-loaded on first use
+        # (This drastically speeds up backend startup)
 
         # Initialize ChromaDB
         print("\n📦 Initializing ChromaDB...")
@@ -146,6 +145,7 @@ app.include_router(google_oauth_router)   # Day 5: Google OAuth
 app.include_router(subjects_router)
 app.include_router(documents_router)
 app.include_router(sessions_router)
+app.include_router(flashcards_router)     # Day 6: Flashcard list + SM-2 review
 app.include_router(chat_router)
 
 

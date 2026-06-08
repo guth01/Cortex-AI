@@ -6,7 +6,7 @@ Loaded once on startup and reused throughout the application.
 """
 
 from typing import List, Union
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 
 
 # Global instance (loaded once on startup)
@@ -25,7 +25,10 @@ def load_model() -> HuggingFaceEmbeddings:
 
     if _embeddings is None:
         print(f"[EMBEDDER] Loading model: {MODEL_NAME}")
-        _embeddings = HuggingFaceEmbeddings(model_name=MODEL_NAME)
+        _embeddings = HuggingFaceEmbeddings(
+            model_name=MODEL_NAME,
+            encode_kwargs={'normalize_embeddings': True}
+        )
         # Warm up with a test embedding
         _embeddings.embed_query("test")
         print("[EMBEDDER] Model loaded successfully!")
@@ -44,9 +47,7 @@ def get_embeddings() -> HuggingFaceEmbeddings:
         RuntimeError: If model hasn't been loaded yet
     """
     if _embeddings is None:
-        raise RuntimeError(
-            "Embedder model not loaded. Call load_model() first during startup."
-        )
+        load_model()
     return _embeddings
 
 
