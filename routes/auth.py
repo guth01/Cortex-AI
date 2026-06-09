@@ -95,4 +95,5 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         email=current_user["email"],
         name=current_user["name"],
         created_at=current_user["created_at"],
+        google_oauth_connected="google_access_token" in current_user,
     )

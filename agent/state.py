@@ -16,14 +16,23 @@ class AgentState(TypedDict):
     subject_id: str          # Subject being studied
 
     # Routing
-    intent: str              # rag_query | content_generation | study_planning | session_end | chitchat
+    intent: str              # rag_query | content_generation | study_planning | calendar_scheduling | session_end | chitchat
 
     # RAG pipeline
     retrieved_chunks: list   # Raw chunks from ChromaDB [{content, metadata, score}]
-    chunk_confidence: float  # Average similarity score of top-3 results (0.0–1.0)
+    chunk_confidence: float  # Top-1 similarity score from search_notes (0.0–1.0)
+
+    # -------------------------------------------------------------------------
+    # Sufficiency Judge pipeline (replaces Wikipedia fallback)
+    # -------------------------------------------------------------------------
+    judge_verdict: Optional[str]    # "SUFFICIENT" | "PARTIAL" | "INSUFFICIENT"
+    judge_reason: Optional[str]     # Short explanation from the judge
+    fallback_strategy: Optional[str]  # "gemini" | "tavily" — chosen by the user
+    web_results: list               # Tavily search results [{title, url, content}]
+    answer_source: Optional[str]    # "notes" | "gemini" | "tavily" | "notes+gemini" | "notes+tavily"
 
     # Tool outputs
-    tool_results: dict       # Keyed by tool name: {"wikipedia": "...", "gap_analysis": {...}}
+    tool_results: dict       # Keyed by tool name: {\"gap_analysis\": {...}, ...}
 
     # Planning (for content_generation / study_planning intents)
     plan: list               # Ordered list of steps the planner chose
@@ -38,3 +47,4 @@ class AgentState(TypedDict):
     # Study planning context — extracted from user message by StudyPlanBuilderNode
     exam_date: Optional[str]      # e.g. "2025-04-15" or "April 15"
     subject_name: Optional[str]   # Denormalized subject name (for tools that need it as string)
+    topics: list                  # Topics provided by the user for this session

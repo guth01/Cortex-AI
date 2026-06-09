@@ -37,6 +37,7 @@ class UserResponse(BaseModel):
     email: str
     name: str
     created_at: datetime
+    google_oauth_connected: bool = False
 
 
 # ============= SUBJECT MODELS =============

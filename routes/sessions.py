@@ -89,6 +89,7 @@ async def start_session(
         "status": "active",
         "started_at": datetime.utcnow(),
         "documents_used": [str(d["_id"]) for d in documents],
+        "topics": session_data.topics,
         "transcript": [],
         "summary": None,
     }

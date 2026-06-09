@@ -10,7 +10,10 @@ Day 5 additions:
   generate_study_plan         — propose study sessions from gap analysis
   create_flashcards           — generate + persist SM-2 flashcards
   generate_exam_revision_sheet — full revision document per subject
-  translate_content           — DeepL translation
+  translate_content           — HuggingFace NLLB translation
+
+Note: fetch_wikipedia_summary has been removed.
+The Wikipedia fallback is replaced by the Sufficiency Judge + Tavily pipeline.
 """
 
 import os
@@ -81,74 +84,6 @@ def search_notes(query: str, session_id: str, top_k: int = 5) -> dict:
     except Exception as e:
         print(f"[TOOL:search_notes] Unexpected error: {e}")
         return {"chunks": [], "confidence": 0.0, "found": False, "error": str(e)}
-
-
-# ============================================================================
-# TOOL: fetch_wikipedia_summary
-# ============================================================================
-
-def fetch_wikipedia_summary(topic: str) -> dict:
-    """
-    Fetch a clean summary from Wikipedia's REST API.
-
-    Args:
-        topic: Topic to look up (e.g. "Virtual memory", "Photosynthesis")
-
-    Returns:
-        {
-            "title": str,
-            "summary": str,   # 3-4 paragraph clean text
-            "url": str,
-            "found": bool
-        }
-    """
-    try:
-        # Wikipedia REST API — no key needed, returns clean extract
-        url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{requests.utils.quote(topic)}"
-        headers = {"User-Agent": "StudyAgentBot/1.0 (educational-ai-project)"}
-
-        response = requests.get(url, headers=headers, timeout=10)
-
-        if response.status_code == 404:
-            print(f"[TOOL:wikipedia] Not found: '{topic}'")
-            return {"title": topic, "summary": "", "url": "", "found": False}
-
-        response.raise_for_status()
-        data = response.json()
-
-        # Extract and clean the text
-        raw_text = data.get("extract", "")
-
-        # Split into sentences and limit to ~4 paragraphs worth
-        # Wikipedia extracts are already clean text, just truncate reasonably
-        sentences = raw_text.split(". ")
-        # Take up to ~20 sentences (roughly 3-4 paragraphs)
-        summary_sentences = sentences[:20]
-        summary = ". ".join(summary_sentences)
-        if not summary.endswith("."):
-            summary += "."
-
-        # Clean up extra whitespace
-        summary = re.sub(r"\s+", " ", summary).strip()
-
-        title = data.get("title", topic)
-        wiki_url = data.get("content_urls", {}).get("desktop", {}).get("page", "")
-
-        print(f"[TOOL:wikipedia] Fetched: '{title}' ({len(summary)} chars)")
-        return {
-            "title": title,
-            "summary": summary,
-            "url": wiki_url,
-            "found": True,
-        }
-
-    except requests.RequestException as e:
-        print(f"[TOOL:wikipedia] Request failed: {e}")
-        return {"title": topic, "summary": "", "url": "", "found": False, "error": str(e)}
-
-    except Exception as e:
-        print(f"[TOOL:wikipedia] Unexpected error: {e}")
-        return {"title": topic, "summary": "", "url": "", "found": False, "error": str(e)}
 
 
 # ============================================================================
@@ -239,16 +174,6 @@ Please provide a {depth_level} summary of "{topic}" {source_info}."""
 # TOOL: knowledge_gap_analysis
 # ============================================================================
 
-# Default expected topics per subject type (user can extend via Atlas later)
-DEFAULT_TOPICS = {
-    "math": ["algebra", "calculus", "statistics", "probability", "linear algebra", "differential equations"],
-    "physics": ["mechanics", "thermodynamics", "electromagnetism", "optics", "quantum mechanics", "relativity"],
-    "chemistry": ["atomic structure", "chemical bonding", "thermochemistry", "kinetics", "electrochemistry", "organic chemistry"],
-    "biology": ["cell biology", "genetics", "evolution", "ecology", "physiology", "biochemistry"],
-    "computer science": ["algorithms", "data structures", "operating systems", "networking", "databases", "software engineering"],
-    "history": ["ancient history", "medieval history", "modern history", "world wars", "colonialism", "political revolutions"],
-    "default": ["introduction", "key concepts", "principles", "applications", "examples", "practice problems"],
-}
 
 # Thresholds
 WELL_COVERED_THRESHOLD = 0.55    # confidence >= this → well covered
@@ -277,17 +202,10 @@ def knowledge_gap_analysis(
         }
     """
     # Determine topic list
-    if custom_topics:
+    if custom_topics and len(custom_topics) > 0:
         topics = custom_topics
     else:
-        # Fuzzy match subject name to our defaults
-        subject_lower = subject_name.lower()
-        matched_key = "default"
-        for key in DEFAULT_TOPICS:
-            if key in subject_lower or subject_lower in key:
-                matched_key = key
-                break
-        topics = DEFAULT_TOPICS[matched_key]
+        topics = ["General Review"]
 
     well_covered = []
     shallow = []
@@ -736,6 +654,7 @@ async def generate_exam_revision_sheet(
     session_id: str,
     subject_name: str,
     llm=None,
+    custom_topics: Optional[List[str]] = None,
 ) -> dict:
     """
     Generate a comprehensive exam revision sheet for a subject.
@@ -767,6 +686,7 @@ async def generate_exam_revision_sheet(
     gap = knowledge_gap_analysis(
         session_id=session_id,
         subject_name=subject_name,
+        custom_topics=custom_topics,
     )
 
     all_topics = (

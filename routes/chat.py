@@ -7,13 +7,15 @@ Flow:
 3. Append user message to Atlas transcript
 4. Invoke LangGraph agent (with thread_id for checkpointer)
 5. Stream response back via SSE (Server-Sent Events)
-6. If awaiting_confirmation → emit plan_pending event + store thread state
-7. Append assistant response to Atlas transcript
+6. If judge verdict is PARTIAL/INSUFFICIENT → emit fallback_choice_pending event
+7. If awaiting_confirmation (study plan) → emit plan_pending event
+8. Append assistant response to Atlas transcript
 
-Day 5 additions:
-  POST /sessions/{session_id}/confirm-plan
-    → resumes the interrupted graph (CalendarNode fires)
-    → streams calendar creation progress + final response
+Endpoints:
+  POST /chat/{session_id}                    — main chat (streaming SSE)
+  POST /chat/{session_id}/sync               — non-streaming variant (testing)
+  POST /chat/{session_id}/choose-fallback    — resume after fallback choice
+  POST /sessions/{session_id}/confirm-plan   — resume after study plan confirmation
 """
 
 import json
@@ -36,10 +38,11 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 
 
 # ============================================================================
-# In-memory store for pending plan confirmations
-# key: session_id  →  value: {thread_id, proposed_events, subject_name, exam_date}
+# In-memory stores
+# key: session_id  →  value: metadata dict
 # ============================================================================
-_pending_plans: dict = {}
+_pending_plans: dict = {}          # Waiting for study plan confirmation
+_pending_fallbacks: dict = {}      # Waiting for fallback strategy choice
 
 
 # ============================================================================
@@ -52,6 +55,10 @@ class ChatMessage(BaseModel):
 
 class ConfirmPlanRequest(BaseModel):
     action: str = "confirm"   # "confirm" or "reject"
+
+
+class FallbackChoiceRequest(BaseModel):
+    strategy: str             # "gemini" or "tavily"
 
 
 # ============================================================================
@@ -73,6 +80,7 @@ async def stream_agent_response(
     user_id: str,
     subject_id: str,
     subject_name: str,
+    topics: list,
     transcript: list,
     db: AsyncIOMotorDatabase,
     session_oid: ObjectId,
@@ -80,8 +88,9 @@ async def stream_agent_response(
     """
     Generator function that:
     1. Sends SSE events as the agent progresses through nodes
-    2. Detects interrupt (awaiting_confirmation) and emits plan_pending event
-    3. Saves the final response to Atlas transcript
+    2. Detects fallback interrupt (PARTIAL/INSUFFICIENT) → emits fallback_choice_pending
+    3. Detects plan interrupt (study_planning) → emits plan_pending
+    4. Saves the final response to Atlas transcript
     """
     yield sse_event({"type": "start", "session_id": session_id}, event="start")
 
@@ -96,6 +105,11 @@ async def stream_agent_response(
         "intent": "",
         "retrieved_chunks": [],
         "chunk_confidence": 0.0,
+        "judge_verdict": None,
+        "judge_reason": None,
+        "fallback_strategy": None,
+        "web_results": [],
+        "answer_source": None,
         "tool_results": {},
         "plan": [],
         "response": "",
@@ -103,6 +117,7 @@ async def stream_agent_response(
         "proposed_calendar_events": [],
         "exam_date": None,
         "subject_name": subject_name,
+        "topics": topics,
     }
 
     # Thread config — required for MemorySaver checkpointer
@@ -122,13 +137,14 @@ async def stream_agent_response(
                     progress_data["confidence"] = round(updates["chunk_confidence"], 3)
                     progress_data["chunks_found"] = len(updates.get("retrieved_chunks", []))
 
+                # Sufficiency Judge progress
+                if "judge_verdict" in updates:
+                    progress_data["judge_verdict"] = updates["judge_verdict"]
+                    progress_data["judge_reason"] = updates.get("judge_reason", "")
+                    print(f"[CHAT] Judge → verdict='{updates['judge_verdict']}'")
+
                 if "tool_results" in updates:
                     tr = updates["tool_results"]
-                    if "wikipedia" in tr:
-                        wiki = tr["wikipedia"]
-                        progress_data["wikipedia_used"] = wiki.get("found", False)
-                        if wiki.get("found"):
-                            progress_data["wikipedia_title"] = wiki.get("title", "")
                     if "gap_analysis" in tr:
                         gap = tr["gap_analysis"]
                         progress_data["gap_analysis"] = {
@@ -143,6 +159,9 @@ async def stream_agent_response(
 
                 if "proposed_calendar_events" in updates:
                     progress_data["events_proposed"] = len(updates["proposed_calendar_events"])
+
+                if "web_results" in updates:
+                    progress_data["web_results_count"] = len(updates.get("web_results", []))
 
                 yield sse_event(progress_data, event="progress")
 
@@ -159,7 +178,9 @@ async def stream_agent_response(
         final_intent = full_result.get("intent", "unknown")
         final_confidence = full_result.get("chunk_confidence", 0.0)
         chunks_used = len(full_result.get("retrieved_chunks", []))
-        wiki_used = bool(full_result.get("tool_results", {}).get("wikipedia", {}).get("found"))
+        judge_verdict = full_result.get("judge_verdict")
+        judge_reason = full_result.get("judge_reason")
+        answer_source = full_result.get("answer_source", "notes")
         is_awaiting = full_result.get("awaiting_confirmation", False)
         proposed_events = full_result.get("proposed_calendar_events", [])
 
@@ -169,9 +190,59 @@ async def stream_agent_response(
         final_intent = "error"
         final_confidence = 0.0
         chunks_used = 0
-        wiki_used = False
+        judge_verdict = None
+        judge_reason = None
+        answer_source = "error"
         is_awaiting = False
         proposed_events = []
+
+    # ---- If judge returned PARTIAL/INSUFFICIENT → emit fallback_choice_pending ----
+    if judge_verdict in ("PARTIAL", "INSUFFICIENT") and not assistant_response.strip():
+        # Graph was interrupted at await_fallback_node — no response yet
+        _pending_fallbacks[session_id] = {
+            "thread_id": session_id,
+            "judge_verdict": judge_verdict,
+            "judge_reason": judge_reason,
+            "created_at": datetime.utcnow().isoformat(),
+        }
+        print(f"[CHAT] Fallback pending for session {session_id}, verdict={judge_verdict}")
+
+        yield sse_event(
+            {
+                "type": "fallback_choice_pending",
+                "verdict": judge_verdict,
+                "reason": judge_reason,
+                "message": (
+                    "Your notes partially cover this topic. How would you like to supplement the answer?"
+                    if judge_verdict == "PARTIAL"
+                    else "This topic is not covered in your notes. How would you like to answer?"
+                ),
+                "options": [
+                    {"id": "gemini", "label": "Use Gemini's knowledge"},
+                    {"id": "tavily", "label": "Search the web (Tavily)"},
+                ],
+                "choose_url": f"/chat/{session_id}/choose-fallback",
+            },
+            event="fallback_choice_pending",
+        )
+
+        # Save user message to transcript (no assistant response yet — that comes after choice)
+        now = datetime.utcnow()
+        await db.sessions.update_one(
+            {"_id": session_oid},
+            {
+                "$push": {
+                    "transcript": {
+                        "role": "user",
+                        "content": message,
+                        "timestamp": now,
+                    }
+                }
+            },
+        )
+
+        yield sse_event({"type": "done"}, event="done")
+        return
 
     # ---- If plan needs confirmation → emit plan_pending event ----
     if is_awaiting and proposed_events:
@@ -212,7 +283,9 @@ async def stream_agent_response(
                                 "intent": final_intent,
                                 "confidence": final_confidence,
                                 "chunks_used": chunks_used,
-                                "wikipedia_used": wiki_used,
+                                "judge_verdict": judge_verdict,
+                                "judge_reason": judge_reason,
+                                "answer_source": answer_source,
                                 "awaiting_confirmation": is_awaiting,
                             },
                         },
@@ -222,7 +295,7 @@ async def stream_agent_response(
         },
     )
 
-    print(f"[CHAT] Transcript saved. intent={final_intent}, confidence={final_confidence:.3f}")
+    print(f"[CHAT] Transcript saved. intent={final_intent}, verdict={judge_verdict}, source={answer_source}")
 
     # ---- Send final response ----
     yield sse_event(
@@ -233,7 +306,9 @@ async def stream_agent_response(
                 "intent": final_intent,
                 "confidence": round(final_confidence, 3),
                 "chunks_used": chunks_used,
-                "wikipedia_used": wiki_used,
+                "judge_verdict": judge_verdict,
+                "judge_reason": judge_reason,
+                "answer_source": answer_source,
                 "awaiting_confirmation": is_awaiting,
             },
         },
@@ -258,9 +333,10 @@ async def chat(
     Send a message to the study agent for an active session.
 
     Returns a streaming SSE response with:
-    - progress events (which nodes fired, intent, confidence)
+    - progress events (which nodes fired, intent, judge verdict)
+    - fallback_choice_pending event (if judge returns PARTIAL/INSUFFICIENT)
     - plan_pending event (if study_planning triggers calendar interrupt)
-    - response event (final answer + metadata)
+    - response event (final answer + metadata including answer_source)
     - done event
 
     Protected — requires authentication and active session ownership.
@@ -315,10 +391,188 @@ async def chat(
             user_id=current_user["id"],
             subject_id=subject_id,
             subject_name=subject_name,
+            topics=session.get("topics", []),
             transcript=session.get("transcript", []),
             db=db,
             session_oid=session_oid,
         ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
+# ============================================================================
+# Choose Fallback endpoint — POST /chat/{session_id}/choose-fallback
+# ============================================================================
+
+@router.post("/{session_id}/choose-fallback")
+async def choose_fallback(
+    session_id: str,
+    body: FallbackChoiceRequest,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    """
+    Resume the interrupted LangGraph after the user chooses a fallback strategy.
+
+    When the Sufficiency Judge returns PARTIAL or INSUFFICIENT, the graph pauses
+    at await_fallback_node and a fallback_choice_pending SSE event is sent.
+    This endpoint resumes execution with the chosen strategy.
+
+    Body:
+        { "strategy": "gemini" | "tavily" }
+
+    strategy="gemini":
+        Graph resumes → synthesis_node generates answer using Gemini's knowledge
+
+    strategy="tavily":
+        Graph resumes → tavily_search_node → synthesis_node generates answer
+        with clearly labelled web content
+
+    Returns: SSE stream with progress + response + done events.
+    """
+    # Validate session ownership
+    try:
+        session_oid = ObjectId(session_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid session ID format")
+
+    session = await db.sessions.find_one({
+        "_id": session_oid,
+        "user_id": current_user["id"],
+    })
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    # Validate strategy
+    strategy = body.strategy.strip().lower()
+    if strategy not in ("gemini", "tavily"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid strategy '{strategy}'. Must be 'gemini' or 'tavily'.",
+        )
+
+    # Check pending fallback exists
+    pending = _pending_fallbacks.get(session_id)
+    if not pending:
+        raise HTTPException(
+            status_code=404,
+            detail="No pending fallback found for this session. Send a message first.",
+        )
+
+    judge_verdict = pending.get("judge_verdict", "INSUFFICIENT")
+    judge_reason = pending.get("judge_reason", "")
+
+    print(f"[CHOOSE-FALLBACK] session={session_id}, strategy={strategy}, verdict={judge_verdict}")
+
+    async def _stream_fallback_response():
+        yield sse_event(
+            {"type": "start", "message": f"Generating answer using {strategy}..."},
+            event="start",
+        )
+
+        thread_config = {"configurable": {"thread_id": session_id}}
+
+        try:
+            # Step 1: Patch fallback_strategy into the paused graph state.
+            # This is the correct LangGraph pattern — update state THEN resume.
+            await study_agent.aupdate_state(
+                thread_config,
+                {"fallback_strategy": strategy},
+            )
+
+            # Step 2: Pass None to resume from the await_fallback_node interrupt.
+            # Passing a dict here would restart the graph from scratch.
+            async for event in study_agent.astream(
+                None,
+                config=thread_config,
+            ):
+                for node_name, updates in event.items():
+                    progress_data = {"type": "progress", "node": node_name}
+
+                    if "web_results" in updates:
+                        progress_data["web_results_count"] = len(updates.get("web_results", []))
+                        print(f"[CHOOSE-FALLBACK] Tavily returned {len(updates.get('web_results', []))} results")
+
+                    if "answer_source" in updates:
+                        progress_data["answer_source"] = updates["answer_source"]
+
+                    yield sse_event(progress_data, event="progress")
+
+        except Exception as e:
+            print(f"[CHOOSE-FALLBACK] Graph resume error: {e}")
+            yield sse_event({"type": "error", "detail": str(e)}, event="error")
+            return
+
+        # Get final state — read it from the checkpointer (don't re-invoke)
+        try:
+            final_state = study_agent.get_state(thread_config).values
+            assistant_response = final_state.get("response", "I couldn't generate a response.")
+            answer_source = final_state.get("answer_source", strategy)
+            final_confidence = final_state.get("chunk_confidence", 0.0)
+            chunks_used = len(final_state.get("retrieved_chunks", []))
+            web_results_count = len(final_state.get("web_results", []))
+
+        except Exception as e:
+            print(f"[CHOOSE-FALLBACK] ainvoke error after resume: {e}")
+            assistant_response = f"I encountered an error generating the answer: {str(e)}"
+            answer_source = "error"
+            final_confidence = 0.0
+            chunks_used = 0
+            web_results_count = 0
+
+        # Save to Atlas transcript
+        now = datetime.utcnow()
+        await db.sessions.update_one(
+            {"_id": session_oid},
+            {
+                "$push": {
+                    "transcript": {
+                        "role": "assistant",
+                        "content": assistant_response,
+                        "timestamp": now,
+                        "metadata": {
+                            "intent": "rag_query",
+                            "confidence": final_confidence,
+                            "chunks_used": chunks_used,
+                            "judge_verdict": judge_verdict,
+                            "judge_reason": judge_reason,
+                            "fallback_strategy": strategy,
+                            "answer_source": answer_source,
+                            "web_results_count": web_results_count,
+                        },
+                    }
+                }
+            },
+        )
+
+        # Clean up pending fallback
+        _pending_fallbacks.pop(session_id, None)
+
+        print(f"[CHOOSE-FALLBACK] Done. source={answer_source}, chars={len(assistant_response)}")
+
+        yield sse_event(
+            {
+                "type": "response",
+                "content": assistant_response,
+                "metadata": {
+                    "judge_verdict": judge_verdict,
+                    "judge_reason": judge_reason,
+                    "fallback_strategy": strategy,
+                    "answer_source": answer_source,
+                    "web_results_count": web_results_count,
+                },
+            },
+            event="response",
+        )
+        yield sse_event({"type": "done"}, event="done")
+
+    return StreamingResponse(
+        _stream_fallback_response(),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -404,9 +658,9 @@ async def confirm_plan(
             yield sse_event({"type": "error", "detail": str(e)}, event="error")
             return
 
-        # Get final state after resume
+        # Get final state — read it from the checkpointer (don't re-invoke)
         try:
-            final_state = await study_agent.ainvoke(None, config=thread_config)
+            final_state = study_agent.get_state(thread_config).values
             calendar_events = final_state.get("tool_results", {}).get("calendar_events", [])
             assistant_response = final_state.get("response", "Your study sessions have been added to Google Calendar! 🎉")
 
@@ -430,6 +684,7 @@ async def confirm_plan(
                                 "timestamp": now,
                                 "metadata": {
                                     "intent": "study_planning",
+                                    "answer_source": "notes",
                                     "calendar_events_created": len(calendar_events),
                                 },
                             },
@@ -526,6 +781,11 @@ async def chat_sync(
         "intent": "",
         "retrieved_chunks": [],
         "chunk_confidence": 0.0,
+        "judge_verdict": None,
+        "judge_reason": None,
+        "fallback_strategy": None,
+        "web_results": [],
+        "answer_source": None,
         "tool_results": {},
         "plan": [],
         "response": "",
@@ -533,10 +793,9 @@ async def chat_sync(
         "proposed_calendar_events": [],
         "exam_date": None,
         "subject_name": subject_name,
+        "topics": session.get("topics", []),
     }
 
-    # Use session_id as the stable thread_id for the MemorySaver checkpoint.
-    # This is critical so confirm-plan can resume the EXACT same graph state.
     thread_id = session_id
     thread_config = {"configurable": {"thread_id": thread_id}}
 
@@ -546,17 +805,28 @@ async def chat_sync(
     final_intent = result.get("intent", "unknown")
     final_confidence = result.get("chunk_confidence", 0.0)
     chunks_used = len(result.get("retrieved_chunks", []))
-    wiki_used = bool(result.get("tool_results", {}).get("wikipedia", {}).get("found"))
+    judge_verdict = result.get("judge_verdict")
+    judge_reason = result.get("judge_reason")
+    answer_source = result.get("answer_source", "notes")
     is_awaiting = result.get("awaiting_confirmation", False)
     proposed_events = result.get("proposed_calendar_events", [])
 
-    # Store pending plan if applicable — thread_id must match the one used above
+    # Store pending plan if applicable
     if is_awaiting and proposed_events:
         _pending_plans[session_id] = {
             "thread_id": thread_id,
             "proposed_events": proposed_events,
             "subject_name": result.get("subject_name", ""),
             "exam_date": result.get("exam_date", ""),
+            "created_at": datetime.utcnow().isoformat(),
+        }
+
+    # Store pending fallback if graph was interrupted by await_fallback_node
+    if judge_verdict in ("PARTIAL", "INSUFFICIENT") and not assistant_response.strip():
+        _pending_fallbacks[session_id] = {
+            "thread_id": thread_id,
+            "judge_verdict": judge_verdict,
+            "judge_reason": judge_reason,
             "created_at": datetime.utcnow().isoformat(),
         }
 
@@ -577,7 +847,9 @@ async def chat_sync(
                                 "intent": final_intent,
                                 "confidence": final_confidence,
                                 "chunks_used": chunks_used,
-                                "wikipedia_used": wiki_used,
+                                "judge_verdict": judge_verdict,
+                                "judge_reason": judge_reason,
+                                "answer_source": answer_source,
                                 "awaiting_confirmation": is_awaiting,
                             },
                         },
@@ -593,7 +865,9 @@ async def chat_sync(
             "intent": final_intent,
             "confidence": round(final_confidence, 3),
             "chunks_used": chunks_used,
-            "wikipedia_used": wiki_used,
+            "judge_verdict": judge_verdict,
+            "judge_reason": judge_reason,
+            "answer_source": answer_source,
             "awaiting_confirmation": is_awaiting,
         },
     }
@@ -601,5 +875,10 @@ async def chat_sync(
     if is_awaiting and proposed_events:
         response_body["proposed_events"] = proposed_events
         response_body["confirm_url"] = f"/sessions/{session_id}/confirm-plan"
+
+    if judge_verdict in ("PARTIAL", "INSUFFICIENT") and not assistant_response.strip():
+        response_body["fallback_choice_pending"] = True
+        response_body["choose_url"] = f"/chat/{session_id}/choose-fallback"
+        response_body["options"] = ["gemini", "tavily"]
 
     return response_body

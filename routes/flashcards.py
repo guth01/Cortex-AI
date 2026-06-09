@@ -11,6 +11,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
 from pydantic import BaseModel
 
+from models import FlashcardResponse
 from routes.deps import get_db, get_current_user, serialize_mongo_doc
 
 router = APIRouter(prefix="/flashcards", tags=["flashcards"])
@@ -49,7 +50,7 @@ def sm2_next_review(easiness: float, interval: int, repetitions: int, quality: i
     return new_easiness, new_interval, new_repetitions, next_review
 
 
-@router.get("", response_model=List[dict])
+@router.get("", response_model=List[FlashcardResponse])
 async def get_flashcards(
     subject_id: Optional[str] = None,
     current_user: dict = Depends(get_current_user),

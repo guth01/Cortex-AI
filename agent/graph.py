@@ -1,17 +1,30 @@
 """
 LangGraph graph definition for the Study Agent.
 
-Graph topology (after Day 5):
+Graph topology (after Sufficiency Judge redesign):
+
     router
-      ├─ rag_query      → rag → [sufficient: synthesis | insufficient: wikipedia → synthesis]
+      ├─ rag_query      → rag → sufficiency_judge
+      │                         ├─ SUFFICIENT  → synthesis
+      │                         └─ PARTIAL/INSUFFICIENT → await_fallback [INTERRUPT]
+      │                                           ├─ gemini  → synthesis
+      │                                           └─ tavily  → tavily_search → synthesis
+      │
       ├─ content_generation → planner → [flashcard_generator | revision_sheet | rag] → synthesis
-      ├─ study_planning → gap_analysis → study_plan_builder
-      │                                  ├─ has_auth → calendar_node* → synthesis
-      │                                  └─ no_auth  → synthesis
+      ├─ study_planning     → gap_analysis → study_plan_builder
+      │                                      ├─ has_auth → calendar_node* → synthesis
+      │                                      └─ no_auth  → synthesis
+      ├─ calendar_scheduling → direct_calendar_builder
+      │                        ├─ has_auth → calendar_node* → synthesis
+      │                        └─ no_auth  → synthesis
       ├─ session_end    → synthesis
       └─ chitchat       → synthesis
 
   * = LangGraph interrupt fires before calendar_node (human-in-the-loop)
+
+Interrupt points:
+  - interrupt_before=["await_fallback_node"]  — fires when judge verdict is PARTIAL/INSUFFICIENT
+  - interrupt_before=["calendar_node"]         — fires before creating Google Calendar events
 
 Checkpointer: MemorySaver (in-memory; state is keyed by thread_id = session_id)
 """
@@ -23,7 +36,9 @@ from agent.state import AgentState
 from agent.nodes import (
     router_node,
     rag_node,
-    wikipedia_node,
+    sufficiency_judge_node,
+    await_fallback_node,
+    tavily_search_node,
     planner_node,
     synthesis_node,
     gap_analysis_node,
@@ -31,15 +46,17 @@ from agent.nodes import (
     calendar_node,
     flashcard_generator_node,
     revision_sheet_node,
+    direct_calendar_builder_node,
     route_by_intent,
-    route_by_confidence,
+    route_after_judge,
+    route_after_fallback_choice,
     route_by_content_type,
     route_by_calendar_auth,
 )
 
 
 def build_graph():
-    """Build and compile the LangGraph study agent with Day 5 nodes."""
+    """Build and compile the LangGraph study agent with Sufficiency Judge pipeline."""
     graph = StateGraph(AgentState)
 
     # =========================================================================
@@ -47,13 +64,19 @@ def build_graph():
     # =========================================================================
     graph.add_node("router", router_node)
     graph.add_node("rag", rag_node)
-    graph.add_node("wikipedia", wikipedia_node)
+
+    # Sufficiency Judge pipeline (replaces Wikipedia fallback)
+    graph.add_node("sufficiency_judge", sufficiency_judge_node)
+    graph.add_node("await_fallback_node", await_fallback_node)  # interrupt anchor
+    graph.add_node("tavily_search", tavily_search_node)
+
     graph.add_node("planner", planner_node)
     graph.add_node("synthesis", synthesis_node)
 
     # Day 5 nodes
     graph.add_node("gap_analysis", gap_analysis_node)
     graph.add_node("study_plan_builder", study_plan_builder_node)
+    graph.add_node("direct_calendar_builder", direct_calendar_builder_node)
     graph.add_node("calendar_node", calendar_node)
     graph.add_node("flashcard_generator", flashcard_generator_node)
     graph.add_node("revision_sheet", revision_sheet_node)
@@ -72,23 +95,38 @@ def build_graph():
         {
             "rag": "rag",
             "planner": "planner",
-            "gap_analysis": "gap_analysis",   # study_planning intent
-            "synthesis": "synthesis",          # chitchat + session_end
+            "gap_analysis": "gap_analysis",               # study_planning intent
+            "direct_calendar_builder": "direct_calendar_builder",  # calendar_scheduling intent
+            "synthesis": "synthesis",                     # chitchat + session_end
         },
     )
 
     # =========================================================================
-    # RAG pipeline
+    # RAG pipeline — Sufficiency Judge replaces route_by_confidence + Wikipedia
     # =========================================================================
+    graph.add_edge("rag", "sufficiency_judge")
+
     graph.add_conditional_edges(
-        "rag",
-        route_by_confidence,
+        "sufficiency_judge",
+        route_after_judge,
         {
-            "sufficient": "synthesis",
-            "insufficient": "wikipedia",
+            "synthesis": "synthesis",          # SUFFICIENT — go straight to answer
+            "await_fallback": "await_fallback_node",  # PARTIAL/INSUFFICIENT — interrupt
         },
     )
-    graph.add_edge("wikipedia", "synthesis")
+
+    # After user chooses fallback strategy → route to Tavily or Gemini synthesis
+    graph.add_conditional_edges(
+        "await_fallback_node",
+        route_after_fallback_choice,
+        {
+            "tavily_search": "tavily_search",  # user chose Tavily
+            "synthesis": "synthesis",          # user chose Gemini
+        },
+    )
+
+    # Tavily results flow directly into synthesis
+    graph.add_edge("tavily_search", "synthesis")
 
     # =========================================================================
     # Content generation pipeline
@@ -100,7 +138,7 @@ def build_graph():
         {
             "flashcard_generator": "flashcard_generator",
             "revision_sheet": "revision_sheet",
-            "rag": "rag",   # generic content gen → retrieve then synthesize
+            "rag": "rag",   # generic content gen → retrieve then judge then synthesize
         },
     )
     graph.add_edge("flashcard_generator", "synthesis")
@@ -121,6 +159,16 @@ def build_graph():
             "no_auth": "synthesis",        # just returns plan as text
         },
     )
+
+    graph.add_conditional_edges(
+        "direct_calendar_builder",
+        route_by_calendar_auth,
+        {
+            "has_auth": "calendar_node",
+            "no_auth": "synthesis",
+        },
+    )
+
     graph.add_edge("calendar_node", "synthesis")
 
     # =========================================================================
@@ -130,14 +178,16 @@ def build_graph():
 
     # =========================================================================
     # Compile with:
-    #   - MemorySaver checkpointer (required for interrupt to work)
-    #   - interrupt_before=["calendar_node"] (human-in-the-loop)
+    #   - MemorySaver checkpointer (required for interrupts to work)
+    #   - interrupt_before=["await_fallback_node", "calendar_node"]
+    #     await_fallback_node → pauses for user fallback strategy choice
+    #     calendar_node       → pauses for user plan confirmation
     # =========================================================================
     checkpointer = MemorySaver()
 
     return graph.compile(
         checkpointer=checkpointer,
-        interrupt_before=["calendar_node"],
+        interrupt_before=["await_fallback_node", "calendar_node"],
     )
 
 
