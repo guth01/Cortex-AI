@@ -67,8 +67,8 @@ export default function StudyPlanConfirm({ events, sessionId, onConfirm, onRejec
                     <td className="px-4 py-2 text-slate-300">{ev.topic}</td>
                     <td className="px-4 py-2 text-slate-400 whitespace-nowrap">{ev.duration_minutes}min</td>
                     <td className="px-4 py-2">
-                      <Badge color={coverageColors[ev.coverage_level] ?? 'slate'}>
-                        {ev.coverage_level.replace('_', ' ')}
+                      <Badge color={ev.coverage_level ? coverageColors[ev.coverage_level] ?? 'slate' : 'slate'}>
+                        {ev.coverage_level ? ev.coverage_level.replace('_', ' ') : 'Manual'}
                       </Badge>
                     </td>
                   </tr>

@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 import Navbar from '@/components/Navbar';
@@ -20,12 +20,13 @@ function DocumentsContent() {
   const { subjects, loading: subjectsLoading } = useSubjects();
   const [activeTab, setActiveTab] = useState<string>(initSubject);
   const subjectIdFilter = activeTab === 'all' ? undefined : activeTab;
-  const { documents, loading: docsLoading, uploadDocument, deleteDocument, refetch } = useDocuments(subjectIdFilter);
+  const { documents, loading: docsLoading, uploadDocument, deleteDocument } = useDocuments(subjectIdFilter);
   const { startSession } = useSessions();
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState('');
+  const [topicsInput, setTopicsInput] = useState('');
 
   // If redirected here to start a session, auto-focus the subject tab
   useEffect(() => {
@@ -38,7 +39,11 @@ function DocumentsContent() {
   const toggleDoc = (id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
       return next;
     });
   };
@@ -47,10 +52,14 @@ function DocumentsContent() {
     if (selectedIds.size === 0) { setStartError('Select at least one document'); return; }
     const subjectId = activeTab === 'all' ? undefined : activeTab;
     if (!subjectId) { setStartError('Select a subject tab first'); return; }
+    
+    const topics = topicsInput.split(',').map(t => t.trim()).filter(t => t.length > 0);
+    if (topics.length === 0) { setStartError('Please enter at least one topic'); return; }
+
     setStarting(true);
     setStartError('');
     try {
-      const { session_id } = await startSession(subjectId, Array.from(selectedIds));
+      const { session_id } = await startSession(subjectId, Array.from(selectedIds), topics);
       router.push(`/session/${session_id}`);
     } catch (e: unknown) {
       const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
@@ -82,6 +91,13 @@ function DocumentsContent() {
                   {selectedIds.size} doc{selectedIds.size !== 1 ? 's' : ''} selected
                 </span>
               )}
+              <input
+                type="text"
+                placeholder="Topics to study (e.g. recursion, arrays)"
+                value={topicsInput}
+                onChange={(e) => setTopicsInput(e.target.value)}
+                className="bg-[#161d2e] border border-[#1f2d4a] rounded-xl px-4 py-2 text-sm text-slate-300 focus:outline-none focus:border-indigo-500/50 w-64"
+              />
               <Button
                 onClick={handleStartSession}
                 loading={starting}

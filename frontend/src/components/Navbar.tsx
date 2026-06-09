@@ -1,8 +1,9 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import apiClient, { removeToken } from '@/lib/apiClient';
+import type { User } from '@/types';
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: '🏠' },
@@ -15,6 +16,20 @@ export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
   const [isConnecting, setIsConnecting] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+
+  // Fetch user to check OAuth status
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const { data } = await apiClient.get<User>('/auth/me');
+        setUser(data);
+      } catch {
+        // ignore
+      }
+    };
+    fetchUser();
+  }, []);
 
   const handleLogout = () => {
     removeToken();
@@ -41,11 +56,13 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link href="/dashboard" className="flex items-center gap-2.5 group">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-sm font-bold shadow-lg group-hover:shadow-indigo-500/30 transition-shadow">
-              SA
+          <Link href="/dashboard" className="flex items-center gap-3 group">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-500 to-fuchsia-500 flex items-center justify-center text-white shadow-lg shadow-indigo-500/20 group-hover:shadow-indigo-500/40 transition-all">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
             </div>
-            <span className="font-semibold text-slate-200 tracking-tight">Study Agent</span>
+            <span className="font-bold text-slate-100 tracking-tight text-lg">Lumina</span>
           </Link>
 
           {/* Nav links */}
@@ -73,16 +90,25 @@ export default function Navbar() {
 
           {/* Actions */}
           <div className="flex items-center gap-2">
-            <button
-              onClick={handleConnectCalendar}
-              disabled={isConnecting}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-200 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 hover:border-indigo-500/50 transition-all disabled:opacity-50"
-            >
-              <svg className="w-4 h-4 text-indigo-400" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20a2 2 0 002 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zM9 14H7v-2h2v2zm4 0h-2v-2h2v2zm4 0h-2v-2h2v2zm-8 4H7v-2h2v2zm4 0h-2v-2h2v2zm4 0h-2v-2h2v2z" />
-              </svg>
-              <span className="hidden sm:block">{isConnecting ? 'Connecting...' : 'Connect Calendar'}</span>
-            </button>
+            {user?.google_oauth_connected ? (
+              <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <span className="hidden sm:block">Calendar Connected</span>
+              </div>
+            ) : (
+              <button
+                onClick={handleConnectCalendar}
+                disabled={isConnecting}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-200 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 hover:border-indigo-500/50 transition-all disabled:opacity-50"
+              >
+                <svg className="w-4 h-4 text-indigo-400" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20a2 2 0 002 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zM9 14H7v-2h2v2zm4 0h-2v-2h2v2zm4 0h-2v-2h2v2zm-8 4H7v-2h2v2zm4 0h-2v-2h2v2zm4 0h-2v-2h2v2z" />
+                </svg>
+                <span className="hidden sm:block">{isConnecting ? 'Connecting...' : 'Connect Calendar'}</span>
+              </button>
+            )}
 
             <button
               onClick={handleLogout}

@@ -14,9 +14,8 @@ export default function FlashcardsPage() {
   const subjectIdFilter = activeSubject === 'all' ? undefined : activeSubject;
   const { flashcards, loading: cardsLoading, reviewCard } = useFlashcards(subjectIdFilter);
 
-  const today = new Date();
-  const dueCards = flashcards.filter((c) => new Date(c.next_review) <= today);
-  const upcomingCards = flashcards.filter((c) => new Date(c.next_review) > today);
+  const unreviewedCards = flashcards.filter((c) => c.repetitions === 0);
+  const reviewedCards = flashcards.filter((c) => c.repetitions > 0);
 
   return (
     <>
@@ -26,16 +25,15 @@ export default function FlashcardsPage() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold text-slate-100">Flashcards</h1>
-            <p className="text-slate-500 mt-1 text-sm">Spaced repetition review</p>
           </div>
           <div className="flex gap-3">
             <div className="text-center">
-              <p className="text-2xl font-bold text-amber-400">{dueCards.length}</p>
-              <p className="text-xs text-slate-600">Due</p>
+              <p className="text-2xl font-bold text-amber-400">{unreviewedCards.length}</p>
+              <p className="text-xs text-slate-600">To Review</p>
             </div>
             <div className="text-center">
-              <p className="text-2xl font-bold text-slate-400">{upcomingCards.length}</p>
-              <p className="text-xs text-slate-600">Upcoming</p>
+              <p className="text-2xl font-bold text-slate-400">{reviewedCards.length}</p>
+              <p className="text-xs text-slate-600">Done</p>
             </div>
           </div>
         </div>
@@ -81,15 +79,15 @@ export default function FlashcardsPage() {
           </div>
         ) : (
           <div className="space-y-8">
-            {/* Due now */}
-            {dueCards.length > 0 && (
+            {/* To Review */}
+            {unreviewedCards.length > 0 && (
               <section>
                 <div className="flex items-center gap-2 mb-4">
-                  <h2 className="text-base font-semibold text-slate-300">Due Now</h2>
-                  <Badge color="yellow">{dueCards.length}</Badge>
+                  <h2 className="text-base font-semibold text-slate-300">To Review</h2>
+                  <Badge color="yellow">{unreviewedCards.length}</Badge>
                 </div>
                 <div className="space-y-6">
-                  {dueCards.map((card) => (
+                  {unreviewedCards.map((card) => (
                     <div key={card.id} className="glass rounded-2xl p-5">
                       <FlashCardComponent card={card} onReview={reviewCard} />
                     </div>
@@ -98,26 +96,15 @@ export default function FlashcardsPage() {
               </section>
             )}
 
-            {/* Upcoming */}
-            {upcomingCards.length > 0 && (
-              <section>
-                <div className="flex items-center gap-2 mb-4">
-                  <h2 className="text-base font-semibold text-slate-300">Upcoming</h2>
-                  <Badge color="slate">{upcomingCards.length}</Badge>
-                </div>
-                <div className="space-y-6">
-                  {upcomingCards.map((card) => (
-                    <div key={card.id} className="glass rounded-2xl p-5 opacity-75">
-                      <div className="mb-3">
-                        <Badge color="slate">
-                          Due {new Date(card.next_review).toLocaleDateString()}
-                        </Badge>
-                      </div>
-                      <FlashCardComponent card={card} onReview={reviewCard} />
-                    </div>
-                  ))}
-                </div>
-              </section>
+            {/* Note: Reviewed cards are intentionally hidden from this view to keep it clean */}
+            {unreviewedCards.length === 0 && reviewedCards.length > 0 && (
+              <div className="text-center py-16">
+                <div className="text-5xl mb-4">🎉</div>
+                <p className="text-slate-200 font-medium text-xl">All caught up!</p>
+                <p className="text-slate-500 text-sm mt-2">
+                  You have reviewed all {reviewedCards.length} flashcards for this subject.
+                </p>
+              </div>
             )}
           </div>
         )}

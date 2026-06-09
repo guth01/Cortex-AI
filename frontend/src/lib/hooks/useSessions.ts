@@ -24,10 +24,10 @@ export function useSessions(subjectId?: string) {
 
   useEffect(() => { fetch(); }, [fetch]);
 
-  const startSession = async (subjectId: string, documentIds: string[]) => {
+  const startSession = async (subjectId: string, documentIds: string[], topics: string[]) => {
     const { data } = await apiClient.post<{ session_id: string; docs_loaded: number; chunk_count: number }>(
       '/sessions/start',
-      { subject_id: subjectId, document_ids: documentIds }
+      { subject_id: subjectId, document_ids: documentIds, topics }
     );
     return data;
   };

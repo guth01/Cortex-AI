@@ -70,7 +70,7 @@ export default function SessionHistoryPage() {
                 <h1 className="text-xl font-bold text-slate-100">{subjectName || 'Study Session'}</h1>
               </div>
               <div className="flex items-center gap-4 text-xs text-slate-500">
-                <span>📅 {format(new Date(session.started_at), 'MMMM d, yyyy · h:mm a')}</span>
+                <span>📅 {format(new Date(session.started_at.endsWith('Z') ? session.started_at : session.started_at + 'Z'), 'MMMM d, yyyy · h:mm a')}</span>
                 {session.ended_at && (
                   <span>
                     ⏱ {Math.round((new Date(session.ended_at).getTime() - new Date(session.started_at).getTime()) / 60000)} min
@@ -126,7 +126,7 @@ export default function SessionHistoryPage() {
                       </span>
                       {msg.timestamp && (
                         <span className="text-xs text-slate-700">
-                          · {format(new Date(msg.timestamp), 'h:mm a')}
+                          · {format(new Date(msg.timestamp.endsWith('Z') ? msg.timestamp : msg.timestamp + 'Z'), 'h:mm a')}
                         </span>
                       )}
                       {msg.metadata?.intent && (
@@ -154,8 +154,11 @@ export default function SessionHistoryPage() {
                             {msg.metadata.chunks_used} chunks
                           </span>
                         )}
-                        {msg.metadata.wikipedia_used && (
-                          <span className="text-xs text-slate-700">🌐 Wikipedia</span>
+                        {msg.metadata.answer_source && (
+                          <span className="text-xs text-slate-700">📎 {msg.metadata.answer_source}</span>
+                        )}
+                        {msg.metadata.judge_verdict && (
+                          <span className="text-xs text-slate-700">⚖️ {msg.metadata.judge_verdict}</span>
                         )}
                       </div>
                     )}

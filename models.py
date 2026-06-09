@@ -75,6 +75,7 @@ class DocumentResponse(BaseModel):
 class SessionCreate(BaseModel):
     subject_id: str
     document_ids: List[str]
+    topics: List[str] = []
 
 
 class SessionStartResponse(BaseModel):
@@ -88,6 +89,7 @@ class SessionResponse(BaseModel):
     user_id: str
     subject_id: str
     documents_used: List[str]
+    topics: List[str] = []
     status: SessionStatus
     started_at: datetime
     ended_at: Optional[datetime] = None

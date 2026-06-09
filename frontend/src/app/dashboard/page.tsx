@@ -15,7 +15,7 @@ import { useSessions } from '@/lib/hooks/useSessions';
 export default function DashboardPage() {
   const router = useRouter();
   const { subjects, loading: subjectsLoading, createSubject, deleteSubject } = useSubjects();
-  const { sessions, loading: sessionsLoading } = useSessions();
+  const { sessions, loading: sessionsLoading, refetch: refetchSessions } = useSessions();
   const [addModal, setAddModal] = useState(false);
   const [oauthSuccess, setOauthSuccess] = useState<string | null>(null);
 
@@ -32,6 +32,10 @@ export default function DashboardPage() {
       }
     }
   }, []);
+
+  // Always refetch sessions when the dashboard mounts so the list is never
+  // stale after navigating back from an ended session.
+  useEffect(() => { refetchSessions(); }, [refetchSessions]);
 
   const recentSessions = sessions
     .filter((s) => s.status === 'completed')
@@ -89,7 +93,7 @@ export default function DashboardPage() {
               <div>
                 <p className="text-sm font-medium text-emerald-400">Active session in progress</p>
                 <p className="text-xs text-slate-500">
-                  {subjectMap[activeSession.subject_id] ?? 'Unknown subject'} · Started {formatDistanceToNow(new Date(activeSession.started_at), { addSuffix: true })}
+                  {subjectMap[activeSession.subject_id] ?? 'Unknown subject'} · Started {formatDistanceToNow(new Date(activeSession.started_at.endsWith('Z') ? activeSession.started_at : activeSession.started_at + 'Z'), { addSuffix: true })}
                 </p>
               </div>
             </div>
@@ -175,7 +179,7 @@ export default function DashboardPage() {
                       </span>
                     </div>
                     <span className="text-xs text-slate-600">
-                      {formatDistanceToNow(new Date(session.started_at), { addSuffix: true })}
+                      {formatDistanceToNow(new Date(session.started_at.endsWith('Z') ? session.started_at : session.started_at + 'Z'), { addSuffix: true })}
                     </span>
                   </div>
                   {session.summary && (

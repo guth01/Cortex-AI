@@ -169,4 +169,63 @@ export async function streamConfirmPlan(
   }
 }
 
+/**
+ * SSE stream for choose-fallback endpoint.
+ * Called after the Sufficiency Judge returns PARTIAL or INSUFFICIENT
+ * and the user selects "gemini" or "tavily".
+ */
+export async function streamChooseFallback(
+  sessionId: string,
+  strategy: 'gemini' | 'tavily',
+  onEvent: (event: string, data: unknown) => void
+) {
+  const token = getToken();
+  const res = await fetch(
+    `${process.env.NEXT_PUBLIC_API_URL}/chat/${sessionId}/choose-fallback`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ strategy }),
+    }
+  );
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Unknown error' }));
+    throw new Error(err.detail || `HTTP ${res.status}`);
+  }
+
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const parts = buffer.split('\n\n');
+    buffer = parts.pop() ?? '';
+
+    for (const part of parts) {
+      const lines = part.split('\n');
+      let eventName = 'message';
+      let dataStr = '';
+      for (const line of lines) {
+        if (line.startsWith('event: ')) eventName = line.slice(7).trim();
+        if (line.startsWith('data: ')) dataStr = line.slice(6).trim();
+      }
+      if (dataStr) {
+        try {
+          onEvent(eventName, JSON.parse(dataStr));
+        } catch {
+          // ignore malformed
+        }
+      }
+    }
+  }
+}
+
 export default apiClient;

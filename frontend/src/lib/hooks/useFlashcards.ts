@@ -14,13 +14,8 @@ export function useFlashcards(subjectId?: string) {
     try {
       const params = subjectId ? { subject_id: subjectId } : {};
       const { data } = await apiClient.get<Flashcard[]>('/flashcards', { params });
-      // Sort: due cards first
-      const today = new Date();
-      const sorted = [...data].sort((a, b) => {
-        const aDue = new Date(a.next_review) <= today ? -1 : 1;
-        const bDue = new Date(b.next_review) <= today ? -1 : 1;
-        return aDue - bDue;
-      });
+      // Sort: unreviewed (repetitions = 0) cards first
+      const sorted = [...data].sort((a, b) => a.repetitions - b.repetitions);
       setFlashcards(sorted);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to load flashcards');
@@ -32,8 +27,23 @@ export function useFlashcards(subjectId?: string) {
   useEffect(() => { fetch(); }, [fetch]);
 
   const reviewCard = async (id: string, quality: number) => {
-    await apiClient.post(`/flashcards/${id}/review`, { quality });
-    await fetch(); // re-fetch to get updated due dates
+    // Optimistic update: mark it as reviewed immediately to prevent UI jumps
+    setFlashcards((prev) =>
+      prev.map((card) => {
+        if (card.id === id) {
+          // Optimistically mark as reviewed
+          return { ...card, repetitions: card.repetitions + 1 };
+        }
+        return card;
+      })
+    );
+    
+    try {
+      await apiClient.post(`/flashcards/${id}/review`, { quality });
+    } catch {
+      // Revert on error
+      await fetch();
+    }
   };
 
   return { flashcards, loading, error, refetch: fetch, reviewCard };

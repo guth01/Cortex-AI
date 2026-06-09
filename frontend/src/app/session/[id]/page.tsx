@@ -8,14 +8,29 @@ import StudyPlanConfirm from '@/components/StudyPlanConfirm';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import Spinner from '@/components/ui/Spinner';
-import apiClient, { streamChat, streamConfirmPlan } from '@/lib/apiClient';
-import type { Session, SSEProgress, StudyPlanEvent, TranscriptMessage, SSEPlanPending, SSEResponse } from '@/types';
+import apiClient, { streamChat, streamConfirmPlan, streamChooseFallback } from '@/lib/apiClient';
+import type {
+  Session,
+  SSEProgress,
+  StudyPlanEvent,
+  TranscriptMessage,
+  SSEPlanPending,
+  SSEResponse,
+  SSEFallbackPending,
+} from '@/types';
 
 interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
   id: string;
   streaming?: boolean;
+}
+
+// Payload stored when the judge triggers a fallback interrupt
+interface PendingFallback {
+  verdict: 'PARTIAL' | 'INSUFFICIENT';
+  reason: string;
+  message: string;
 }
 
 export default function SessionPage() {
@@ -34,11 +49,18 @@ export default function SessionPage() {
   const [pendingPlan, setPendingPlan] = useState<StudyPlanEvent[] | null>(null);
   const [confirmingPlan, setConfirmingPlan] = useState(false);
 
+  // Fallback choice state — set when judge returns PARTIAL or INSUFFICIENT
+  const [pendingFallback, setPendingFallback] = useState<PendingFallback | null>(null);
+  const [choosingFallback, setChoosingFallback] = useState(false);
+
   const [ending, setEnding] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  // The id of the "Thinking..." assistant bubble that shows while streaming
+  const asstMsgIdRef = useRef<string>('');
 
   // Load session
   useEffect(() => {
@@ -73,7 +95,7 @@ export default function SessionPage() {
   // Auto-scroll
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, progressEvents]);
+  }, [messages, progressEvents, pendingFallback]);
 
   const sendMessage = useCallback(async () => {
     if (!input.trim() || isStreaming) return;
@@ -81,9 +103,11 @@ export default function SessionPage() {
     setInput('');
     setProgressEvents([]);
     setPendingPlan(null);
+    setPendingFallback(null);
 
     const userMsgId = `user-${Date.now()}`;
     const asstMsgId = `asst-${Date.now()}`;
+    asstMsgIdRef.current = asstMsgId;
 
     setMessages((prev) => [...prev, { id: userMsgId, role: 'user', content: msg }]);
     setIsStreaming(true);
@@ -91,24 +115,42 @@ export default function SessionPage() {
 
     abortRef.current = new AbortController();
     let fullContent = '';
+    let gotResponse = false;
 
     try {
       await streamChat(sessionId, msg, (event, data) => {
         if (event === 'progress') {
           const progress = data as SSEProgress;
           setProgressEvents((prev) => [...prev, progress]);
+
+        } else if (event === 'fallback_choice_pending') {
+          // Judge returned PARTIAL or INSUFFICIENT — graph is paused.
+          // Remove the "Thinking..." bubble and show the fallback choice UI.
+          const payload = data as SSEFallbackPending;
+          gotResponse = true;
+          setMessages((prev) => prev.filter((m) => m.id !== asstMsgId));
+          setPendingFallback({
+            verdict: payload.verdict,
+            reason: payload.reason,
+            message: payload.message,
+          });
+
         } else if (event === 'plan_pending') {
           const pending = data as SSEPlanPending;
           setPendingPlan(pending.proposed_events ?? []);
+
         } else if (event === 'response') {
           const response = data as SSEResponse;
           fullContent = response.content ?? '';
+          gotResponse = true;
           setMessages((prev) =>
             prev.map((m) => (m.id === asstMsgId ? { ...m, content: fullContent, streaming: false } : m))
           );
+
         } else if (event === 'error') {
-          const err = data as Record<string, any>;
+          const err = data as Record<string, unknown>;
           fullContent = `⚠ Error: ${err.detail}`;
+          gotResponse = true;
           setMessages((prev) =>
             prev.map((m) => (m.id === asstMsgId ? { ...m, content: fullContent, streaming: false } : m))
           );
@@ -117,15 +159,65 @@ export default function SessionPage() {
     } catch (e: unknown) {
       if ((e as Error).name !== 'AbortError') {
         setMessages((prev) =>
-          prev.map((m) => m.id === asstMsgId ? { ...m, content: '⚠ Connection error. Try again.', streaming: false } : m)
+          prev.map((m) =>
+            m.id === asstMsgId ? { ...m, content: '⚠ Connection error. Try again.', streaming: false } : m
+          )
         );
       }
     } finally {
+      // If the graph paused for fallback choice we already removed the bubble —
+      // make sure it doesn't linger in a streaming state
+      if (!gotResponse) {
+        setMessages((prev) =>
+          prev.map((m) => (m.id === asstMsgId ? { ...m, content: '', streaming: false } : m))
+        );
+      }
       setIsStreaming(false);
       setProgressEvents([]);
       inputRef.current?.focus();
     }
   }, [input, isStreaming, sessionId]);
+
+  // Called when the user clicks "Use Gemini" or "Search the web"
+  const handleFallbackChoice = async (strategy: 'gemini' | 'tavily') => {
+    if (choosingFallback) return;
+    setChoosingFallback(true);
+    setPendingFallback(null);
+
+    const asstMsgId = `fallback-asst-${Date.now()}`;
+    setMessages((prev) => [...prev, { id: asstMsgId, role: 'assistant', content: '', streaming: true }]);
+
+    let fullContent = '';
+
+    try {
+      await streamChooseFallback(sessionId, strategy, (event, data) => {
+        if (event === 'response') {
+          const d = data as SSEResponse;
+          fullContent = d.content ?? '';
+          setMessages((prev) =>
+            prev.map((m) => (m.id === asstMsgId ? { ...m, content: fullContent, streaming: false } : m))
+          );
+        } else if (event === 'error') {
+          const err = data as Record<string, unknown>;
+          fullContent = `⚠ Error: ${err.detail}`;
+          setMessages((prev) =>
+            prev.map((m) => (m.id === asstMsgId ? { ...m, content: fullContent, streaming: false } : m))
+          );
+        }
+      });
+    } catch {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === asstMsgId
+            ? { ...m, content: '⚠ Could not get a response. Try again.', streaming: false }
+            : m
+        )
+      );
+    } finally {
+      setChoosingFallback(false);
+      inputRef.current?.focus();
+    }
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -270,6 +362,85 @@ export default function SessionPage() {
             <ToolCallIndicator events={progressEvents} isStreaming={isStreaming} />
           )}
 
+          {/* ----------------------------------------------------------------
+              Fallback Choice Card
+              Shown when the Sufficiency Judge returns PARTIAL or INSUFFICIENT.
+              Lets the user choose between Gemini knowledge or Tavily web search.
+          ---------------------------------------------------------------- */}
+          {pendingFallback && (
+            <div className="fade-in my-4">
+              <div className="glass border border-amber-500/30 rounded-2xl p-5 max-w-lg mx-auto">
+                {/* Verdict badge */}
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-amber-400 text-lg">
+                    {pendingFallback.verdict === 'PARTIAL' ? '⚠️' : '❌'}
+                  </span>
+                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                    pendingFallback.verdict === 'PARTIAL'
+                      ? 'bg-amber-500/20 text-amber-300'
+                      : 'bg-red-500/20 text-red-300'
+                  }`}>
+                    {pendingFallback.verdict === 'PARTIAL' ? 'Partial Coverage' : 'Not in Notes'}
+                  </span>
+                </div>
+
+                {/* Message */}
+                <p className="text-slate-200 text-sm font-medium mb-1">
+                  {pendingFallback.message}
+                </p>
+                <p className="text-slate-500 text-xs mb-4 leading-relaxed">
+                  {pendingFallback.reason}
+                </p>
+
+                {/* Choice buttons */}
+                <p className="text-slate-400 text-xs uppercase tracking-wider mb-3 font-semibold">
+                  How would you like to proceed?
+                </p>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <button
+                    id="fallback-gemini-btn"
+                    disabled={choosingFallback}
+                    onClick={() => handleFallbackChoice('gemini')}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl
+                      bg-indigo-600/20 border border-indigo-500/40 text-indigo-300 text-sm font-medium
+                      hover:bg-indigo-600/30 hover:border-indigo-400/60 transition-all
+                      disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {choosingFallback ? (
+                      <Spinner size="sm" />
+                    ) : (
+                      <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                          d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                      </svg>
+                    )}
+                    Use Gemini&apos;s Knowledge
+                  </button>
+
+                  <button
+                    id="fallback-tavily-btn"
+                    disabled={choosingFallback}
+                    onClick={() => handleFallbackChoice('tavily')}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl
+                      bg-emerald-600/20 border border-emerald-500/40 text-emerald-300 text-sm font-medium
+                      hover:bg-emerald-600/30 hover:border-emerald-400/60 transition-all
+                      disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {choosingFallback ? (
+                      <Spinner size="sm" />
+                    ) : (
+                      <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                    )}
+                    Search the Web (Tavily)
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Study plan confirmation */}
           {pendingPlan && pendingPlan.length > 0 && (
             <StudyPlanConfirm
@@ -296,7 +467,7 @@ export default function SessionPage() {
               onKeyDown={handleKeyDown}
               placeholder="Ask a question, request a quiz, or say 'make a study plan'..."
               rows={1}
-              disabled={isStreaming || session?.status !== 'active'}
+              disabled={isStreaming || choosingFallback || session?.status !== 'active'}
               className="w-full px-4 py-3 rounded-xl bg-[#0f1623] border border-[#1f2d4a] text-slate-100 placeholder-slate-600 text-sm resize-none transition-all disabled:opacity-50 max-h-32"
               style={{ minHeight: '48px' }}
             />
@@ -304,7 +475,7 @@ export default function SessionPage() {
           <Button
             onClick={sendMessage}
             loading={isStreaming}
-            disabled={!input.trim() || session?.status !== 'active'}
+            disabled={!input.trim() || choosingFallback || session?.status !== 'active'}
             size="md"
             className="flex-shrink-0 h-12"
           >
