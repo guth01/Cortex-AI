@@ -79,7 +79,7 @@ function DocumentsContent() {
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-slate-100">Documents</h1>
+            <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100">Documents</h1>
             <p className="text-slate-500 mt-1 text-sm">Upload study materials and start sessions</p>
           </div>
 
@@ -87,7 +87,7 @@ function DocumentsContent() {
           {activeTab !== 'all' && (
             <div className="flex items-center gap-3">
               {selectedIds.size > 0 && (
-                <span className="text-sm text-slate-400">
+                <span className="text-sm text-slate-600 dark:text-slate-400">
                   {selectedIds.size} doc{selectedIds.size !== 1 ? 's' : ''} selected
                 </span>
               )}
@@ -96,7 +96,7 @@ function DocumentsContent() {
                 placeholder="Topics to study (e.g. recursion, arrays)"
                 value={topicsInput}
                 onChange={(e) => setTopicsInput(e.target.value)}
-                className="bg-[#161d2e] border border-[#1f2d4a] rounded-xl px-4 py-2 text-sm text-slate-300 focus:outline-none focus:border-indigo-500/50 w-64"
+                className="bg-white dark:bg-[#161d2e] border border-slate-200 dark:border-[#1f2d4a] rounded-xl px-4 py-2 text-sm text-slate-900 dark:text-slate-300 placeholder-slate-400 focus:outline-none focus:border-indigo-500/50 w-64 transition-colors"
               />
               <Button
                 onClick={handleStartSession}
@@ -128,7 +128,7 @@ function DocumentsContent() {
               className={`px-4 py-2 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
                 activeTab === 'all'
                   ? 'bg-indigo-600/20 text-indigo-400 border border-indigo-500/30'
-                  : 'text-slate-500 hover:text-slate-300 hover:bg-[#1e2640] border border-transparent'
+                  : 'text-slate-500 hover:text-slate-700 dark:text-slate-700 dark:text-slate-300 hover:bg-[#1e2640] border border-transparent'
               }`}
             >
               All Documents
@@ -140,7 +140,7 @@ function DocumentsContent() {
                 className={`px-4 py-2 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
                   activeTab === s.id
                     ? 'bg-indigo-600/20 text-indigo-400 border border-indigo-500/30'
-                    : 'text-slate-500 hover:text-slate-300 hover:bg-[#1e2640] border border-transparent'
+                    : 'text-slate-500 hover:text-slate-700 dark:text-slate-700 dark:text-slate-300 hover:bg-[#1e2640] border border-transparent'
                 }`}
               >
                 {s.name}
@@ -151,7 +151,7 @@ function DocumentsContent() {
 
         {/* Upload area */}
         <div className="mb-8 p-6 glass rounded-2xl">
-          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">Upload Files</h2>
+          <h2 className="text-sm font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide mb-4">Upload Files</h2>
           {activeTab !== 'all' && (
             <p className="text-xs text-slate-600 mb-3">
               Uploading to: <span className="text-indigo-400">{subjects.find(s => s.id === activeTab)?.name ?? activeTab}</span>
@@ -166,7 +166,7 @@ function DocumentsContent() {
         {/* Document list with checkboxes */}
         <div className="glass rounded-2xl p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide">
+            <h2 className="text-sm font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide">
               {activeTab === 'all' ? 'All Documents' : 'Documents in this subject'}
               <span className="ml-2 font-normal text-slate-600 normal-case">({documents.length})</span>
             </h2>

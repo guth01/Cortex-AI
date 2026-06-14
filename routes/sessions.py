@@ -13,7 +13,7 @@ from bson import ObjectId
 from models import SessionCreate, SessionStartResponse, SessionResponse, SessionEndResponse
 from routes.deps import get_db, get_current_user, serialize_mongo_doc
 from utils.file_parser import load_documents
-from utils.chunker import split_documents
+from utils.chunker import split_documents, split_documents_document_aware
 from db.chroma import create_session_collection, delete_session_collection
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
@@ -116,7 +116,10 @@ async def start_session(
                 })
 
             # Split into chunks
-            chunks = await asyncio.to_thread(split_documents, lc_docs)
+            if session_data.chunking_strategy == "document_aware":
+                chunks = await asyncio.to_thread(split_documents_document_aware, lc_docs)
+            else:
+                chunks = await asyncio.to_thread(split_documents, lc_docs)
 
             # Add chunk index to metadata
             for i, chunk in enumerate(chunks):
@@ -163,7 +166,6 @@ async def end_session(
 
     - Marks session as completed
     - Deletes ChromaDB collection (no trace left)
-    - Returns session summary placeholder (agent evaluator wired on Day 7)
 
     Protected route — requires authentication.
     """
@@ -200,7 +202,7 @@ async def end_session(
             "$set": {
                 "status": "completed",
                 "ended_at": ended_at,
-                "summary": "Session completed. (AI summary will be generated on Day 7)",
+                "summary": None,
             }
         },
     )
@@ -213,7 +215,7 @@ async def end_session(
         status="completed",
         started_at=session["started_at"],
         ended_at=ended_at,
-        summary="Session completed. (AI summary will be generated on Day 7)",
+        summary=None,
     )
 
 
@@ -248,6 +250,9 @@ async def get_session(
             detail="Session not found",
         )
 
+    if session.get("summary") == "Session completed. (AI summary will be generated on Day 7)":
+        session["summary"] = None
+
     return SessionResponse(**serialize_mongo_doc(session))
 
 
@@ -271,5 +276,9 @@ async def get_sessions(
     sessions = await db.sessions.find(query).sort(
         "started_at", -1
     ).to_list(length=None)
+
+    for s in sessions:
+        if s.get("summary") == "Session completed. (AI summary will be generated on Day 7)":
+            s["summary"] = None
 
     return [SessionResponse(**serialize_mongo_doc(s)) for s in sessions]

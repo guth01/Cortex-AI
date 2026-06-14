@@ -47,6 +47,7 @@ from agent.nodes import (
     flashcard_generator_node,
     revision_sheet_node,
     direct_calendar_builder_node,
+    translation_node,
     route_by_intent,
     route_after_judge,
     route_after_fallback_choice,
@@ -80,6 +81,7 @@ def build_graph():
     graph.add_node("calendar_node", calendar_node)
     graph.add_node("flashcard_generator", flashcard_generator_node)
     graph.add_node("revision_sheet", revision_sheet_node)
+    graph.add_node("translation", translation_node)
 
     # =========================================================================
     # Entry point
@@ -97,6 +99,7 @@ def build_graph():
             "planner": "planner",
             "gap_analysis": "gap_analysis",               # study_planning intent
             "direct_calendar_builder": "direct_calendar_builder",  # calendar_scheduling intent
+            "translation": "translation",                 # translation intent
             "synthesis": "synthesis",                     # chitchat + session_end
         },
     )
@@ -170,6 +173,7 @@ def build_graph():
     )
 
     graph.add_edge("calendar_node", "synthesis")
+    graph.add_edge("translation", "synthesis")
 
     # =========================================================================
     # Terminal edge — all paths end at synthesis

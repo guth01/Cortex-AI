@@ -25,9 +25,12 @@ export function useSessions(subjectId?: string) {
   useEffect(() => { fetch(); }, [fetch]);
 
   const startSession = async (subjectId: string, documentIds: string[], topics: string[]) => {
+    // Session start can take 60-120s for large documents (parse + chunk + embed).
+    // Override the default 30s timeout to 5 minutes for this call only.
     const { data } = await apiClient.post<{ session_id: string; docs_loaded: number; chunk_count: number }>(
       '/sessions/start',
-      { subject_id: subjectId, document_ids: documentIds, topics }
+      { subject_id: subjectId, document_ids: documentIds, topics },
+      { timeout: 300_000 }
     );
     return data;
   };

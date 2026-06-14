@@ -34,6 +34,7 @@ from typing import Literal
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
 
 from agent.state import AgentState
 from agent.tools import (
@@ -43,6 +44,7 @@ from agent.tools import (
     create_flashcards,
     generate_exam_revision_sheet,
     create_study_session_event,
+    translate_content,
 )
 from agent.sufficiency_judge import run_sufficiency_judge
 from agent.tavily_search import tavily_search, format_web_results_for_prompt
@@ -106,6 +108,7 @@ def _get_answer_llm(temperature: float = 0.4) -> ChatGoogleGenerativeAI:
         model="gemini-2.5-flash",
         google_api_key=_answer_key,
         temperature=temperature,
+        streaming=True,
     )
 
 
@@ -153,6 +156,8 @@ def _get_groq_llm(temperature: float = 0.3) -> ChatGroq:
 
 ROUTER_SYSTEM_PROMPT = """You are an intent classifier for a student study assistant.
 
+The user might speak in other languages (e.g., Spanish, French). Classify the intent correctly regardless of the language they use.
+
 Classify the user's message into exactly ONE of these intents:
 - rag_query       → asking about content from their notes/documents (explain, what is, how does, etc.)
 - content_generation → asking to create study material (flashcards, quiz, summary, mind map, revision sheet, etc.)
@@ -160,6 +165,7 @@ Classify the user's message into exactly ONE of these intents:
 - calendar_scheduling → specifically asking to schedule a single calendar event or study block at a specific time (e.g. schedule a 2 hour block tomorrow for OS)
 - session_end     → wants to end the session (goodbye, done, quit, stop, finish)
 - chitchat        → casual conversation, greetings, unrelated to studying
+- translation     → asking to translate text to a specific language
 
 Respond with ONLY the intent label, nothing else. No punctuation, no explanation.
 Examples:
@@ -170,6 +176,7 @@ Examples:
   User: "plan my OS revision, exam is April 15" → study_planning
   User: "schedule a 90 minute block for databases tomorrow at 3pm" → calendar_scheduling
   User: "generate a revision sheet for databases" → content_generation
+  User: "translate this to French: The study agent is working perfectly!" → translation
   User: "hi there!" → chitchat
   User: "I'm done for today" → session_end"""
 
@@ -193,7 +200,7 @@ async def router_node(state: AgentState) -> dict:
     raw_intent = response.content.strip().lower()
 
     # Validate — fall back to rag_query if model hallucinates
-    valid_intents = {"rag_query", "content_generation", "study_planning", "calendar_scheduling", "session_end", "chitchat"}
+    valid_intents = {"rag_query", "content_generation", "study_planning", "calendar_scheduling", "session_end", "chitchat", "translation"}
     intent = raw_intent if raw_intent in valid_intents else "rag_query"
 
     print(f"[NODE:router] intent='{intent}' (raw='{raw_intent}')")
@@ -533,10 +540,11 @@ async def calendar_node(state: AgentState) -> dict:
     for event in proposed_events:
         result = await create_study_session_event(
             user_id=user_id,
-            subject=f"{event.get('subject', 'Study')} — {event.get('topic', '')}",
-            date=event["date"],
+            subject=event.get("subject", "Study"),
+            date=event.get("date"),
             duration_minutes=event.get("duration_minutes", 60),
             db=db,
+            start_time=event.get("start_time"),
         )
 
         if "error" in result:
@@ -565,12 +573,13 @@ async def calendar_node(state: AgentState) -> dict:
 EXTRACT_DIRECT_CALENDAR_PROMPT = """Extract calendar event parameters from the student's message.
 Return ONLY a JSON object with exactly these fields:
   - "date": the date of the event strictly in YYYY-MM-DD format. Today's date is {today}.
+  - "start_time": the start time strictly in HH:MM format (24-hour). If not specified, default to "09:00".
   - "topic": the subject/topic to study (e.g. "Operating Systems", "React Hooks")
   - "duration_minutes": integer duration in minutes (default to 60 if not specified)
 
 Examples (assuming today is 2025-04-10):
-  "schedule a 90 min study block for databases tomorrow" → {"date": "2025-04-11", "topic": "databases", "duration_minutes": 90}
-  "add a 2 hour math prep session on Friday" → {"date": "2025-04-14", "topic": "math prep", "duration_minutes": 120}
+  "schedule a 90 min study block for databases tomorrow at 3pm" → {"date": "2025-04-11", "start_time": "15:00", "topic": "databases", "duration_minutes": 90}
+  "add a 2 hour math prep session on Friday" → {"date": "2025-04-14", "start_time": "09:00", "topic": "math prep", "duration_minutes": 120}
 
 Return ONLY the JSON, no markdown, no explanation."""
 
@@ -601,15 +610,17 @@ async def direct_calendar_builder_node(state: AgentState) -> dict:
     try:
         extracted = _json.loads(clean)
     except Exception:
-        extracted = {"date": "tomorrow", "topic": "Study Session", "duration_minutes": 60}
+        extracted = {"date": "tomorrow", "start_time": "09:00", "topic": "Study Session", "duration_minutes": 60}
 
     date_str = extracted.get("date", today_str)
+    start_time_str = extracted.get("start_time", "09:00")
     topic = extracted.get("topic", state.get("subject_name", "General Study"))
     duration = int(extracted.get("duration_minutes", 60))
 
     # Format into proposed_calendar_events array
     event = {
         "date": date_str,
+        "start_time": start_time_str,
         "subject": state.get("subject_name", "Study"),
         "topic": topic,
         "duration_minutes": duration,
@@ -719,10 +730,10 @@ async def revision_sheet_node(state: AgentState) -> dict:
     llm = _get_llm(temperature=0.3)
 
     # Cool down before starting — previous nodes (router, flashcard, synthesis)
-    # may have consumed the 5 RPM budget. Wait 15s to let the window reset.
-    print("[NODE:revision_sheet] Waiting 15s for API rate limit window reset...")
+    # may have consumed some budget, but since Llama handles router now, 2s is enough.
+    print("[NODE:revision_sheet] Waiting 2s for API rate limit window reset...")
     import asyncio as _asyncio
-    await _asyncio.sleep(15)
+    await _asyncio.sleep(2)
 
     subject_name = state.get("subject_name") or "General"
     topics = state.get("topics", [])
@@ -744,6 +755,60 @@ async def revision_sheet_node(state: AgentState) -> dict:
 
 
 # ============================================================================
+# TranslationNode — extracts text/lang and translates (Day 5)
+# ============================================================================
+
+EXTRACT_TRANSLATION_PROMPT = """Extract translation parameters from the student's message.
+Return ONLY a JSON object with exactly these fields:
+  - "target_language": the language to translate to (e.g. "French", "Spanish")
+  - "text": the exact text that needs to be translated
+
+Examples:
+  "translate this to French: The study agent is working perfectly!" → {"target_language": "French", "text": "The study agent is working perfectly!"}
+  "how do you say hello world in spanish?" → {"target_language": "Spanish", "text": "hello world"}
+
+Return ONLY the JSON, no markdown, no explanation."""
+
+async def translation_node(state: AgentState) -> dict:
+    """
+    TranslationNode: Translate text using Hugging Face NLLB.
+    Extracts text and target language, then calls translate_content.
+    """
+    print("[NODE:translation] Translating content...")
+
+    import json as _json
+    llm = _get_groq_llm(temperature=0.0)
+    last_message = state["messages"][-1]["content"] if state["messages"] else ""
+
+    # Step 1: Extract text + language
+    extract_response = await llm.ainvoke([
+        SystemMessage(content=EXTRACT_TRANSLATION_PROMPT),
+        HumanMessage(content=last_message),
+    ])
+
+    raw = extract_response.content.strip()
+    clean = re.sub(r"```(?:json)?\n?", "", raw).strip().rstrip("`")
+
+    try:
+        extracted = _json.loads(clean)
+        target_language = extracted.get("target_language", "English")
+        text_to_translate = extracted.get("text", last_message)
+    except Exception:
+        target_language = "English"
+        text_to_translate = last_message
+
+    print(f"[NODE:translation] target_language='{target_language}'")
+
+    # Step 2: Translate
+    translation_result = translate_content(text=text_to_translate, target_language=target_language)
+
+    tool_results = dict(state.get("tool_results") or {})
+    tool_results["translation"] = translation_result
+
+    return {"tool_results": tool_results}
+
+
+# ============================================================================
 # SynthesisNode — the ONLY node that produces the final answer
 # Five distinct generation paths keyed by (judge_verdict, fallback_strategy)
 # ============================================================================
@@ -756,11 +821,12 @@ Your job is to give clear, accurate, and helpful responses to students.
 RULES:
 - Always prioritize information found in the student's uploaded notes
 - Be conversational but educational
-- Use markdown formatting: **bold** for key terms, bullet points for lists
+- Use bullet points for lists, but DO NOT use asterisks (**) for bolding. Use plain text instead.
 - Keep responses focused and appropriately detailed for studying
 - Never make up facts — if uncertain, say so
 - When external information is used, label it clearly and separately from note content
-- Never silently mix note content and external content"""
+- Never silently mix note content and external content
+- Automatically detect the language the user is speaking, and seamlessly reply in that same language."""
 
 
 # ---- Case prompts ----
@@ -865,7 +931,7 @@ Web Results:
 {web_results_text}"""
 
 
-async def synthesis_node(state: AgentState) -> dict:
+async def synthesis_node(state: AgentState, config: RunnableConfig) -> dict:
     """
     SynthesisNode: Generate the final response using all available context.
 
@@ -1012,6 +1078,11 @@ async def synthesis_node(state: AgentState) -> dict:
         doc_preview = revision_sheet["document"][:1500]  # first 1500 chars
         context_parts.append(f"## Revision Sheet (Preview)\n{doc_preview}")
 
+    # Day 5: Translation
+    translation_result = tool_results.get("translation", {})
+    if translation_result and "translated_text" in translation_result:
+        context_parts.append(f"## Translation Result\n{translation_result['translated_text']}")
+
     context_block = "\n\n".join(context_parts) if context_parts else "No specific context available — using general knowledge."
 
     # ---- Build intent-aware prompt for non-RAG paths ----
@@ -1032,7 +1103,7 @@ I've analyzed their knowledge gaps and created a study plan.
 Present the proposed study plan clearly:
 - Show the key sessions (group by week if many)
 - Explain WHY certain topics are prioritized (based on gap analysis)
-- End with: "Reply **confirm** to add these to your Google Calendar, or let me know if you'd like to adjust the plan."
+- End with: "Reply confirm to add these to your Google Calendar, or let me know if you'd like to adjust the plan."
 
 Keep the tone encouraging and motivating."""
             answer_source = "notes"
@@ -1044,7 +1115,7 @@ I've extracted the details for a calendar event based on their request.
 
 {context_block}
 
-Present this proposed event clearly and end with: "Reply **confirm** to add this to your Google Calendar, or let me know if you'd like to adjust it."
+Present this proposed event clearly and end with: "Reply confirm to add this to your Google Calendar, or let me know if you'd like to adjust it."
 Keep the tone encouraging and helpful."""
             answer_source = "notes"
 
@@ -1054,8 +1125,8 @@ Keep the tone encouraging and helpful."""
 {context_block}
 
 Present the flashcards in a clear, readable format. Show ALL {flashcard_data.get('cards_created', 0)} cards.
-Format each as:
-**Card N: [card_type]**
+Format your output EXACTLY like this:
+Card N: [card_type]
 Q: [question]
 A: [answer]
 
@@ -1072,6 +1143,10 @@ Summarize what was created, list the calendar links, and give an encouraging mes
 
         elif revision_sheet and revision_sheet.get("document"):
             user_prompt = f"Return the following revision document verbatim:\n\n{revision_sheet['document']}"
+            answer_source = "notes"
+
+        elif translation_result and "translated_text" in translation_result:
+            user_prompt = f"Return the following translated text clearly to the user:\n\n{translation_result['translated_text']}"
             answer_source = "notes"
 
         elif plan:
@@ -1101,7 +1176,7 @@ Answer the question using the context above."""
     response = await llm.ainvoke([
         SystemMessage(content=SYNTHESIS_SYSTEM_PROMPT),
         HumanMessage(content=user_prompt),
-    ])
+    ], config=config)
 
     answer = response.content if hasattr(response, "content") else str(response)
 
@@ -1120,7 +1195,7 @@ Answer the question using the context above."""
 # Edge routing functions (used by LangGraph conditional edges)
 # ============================================================================
 
-def route_by_intent(state: AgentState) -> Literal["rag", "planner", "gap_analysis", "direct_calendar_builder", "synthesis"]:
+def route_by_intent(state: AgentState) -> Literal["rag", "planner", "gap_analysis", "direct_calendar_builder", "synthesis", "translation"]:
     """
     Map intent → next node after router.
     """
@@ -1131,6 +1206,7 @@ def route_by_intent(state: AgentState) -> Literal["rag", "planner", "gap_analysi
         "calendar_scheduling": "direct_calendar_builder",
         "session_end": "synthesis",
         "chitchat": "synthesis",
+        "translation": "translation",
     }
     intent = state.get("intent", "rag_query")
     print(f"[EDGE:intent] {intent} -> {routes.get(intent, 'rag')}")

@@ -6,7 +6,7 @@ const nodeMap: Record<string, { label: string; emoji: string; color: string }> =
   retrieval: { label: 'Searching your notes...', emoji: '📖', color: 'text-blue-400' },
   rag: { label: 'Searching your notes...', emoji: '📖', color: 'text-blue-400' },
   sufficiency_judge: { label: 'Evaluating note coverage...', emoji: '⚖️', color: 'text-amber-400' },
-  await_fallback_node: { label: 'Waiting for your choice...', emoji: '⏸️', color: 'text-slate-400' },
+  await_fallback_node: { label: 'Waiting for your choice...', emoji: '⏸️', color: 'text-slate-600 dark:text-slate-400' },
   tavily_search: { label: 'Searching the web...', emoji: '🔍', color: 'text-emerald-400' },
   gap_analysis: { label: 'Analyzing knowledge gaps...', emoji: '🔎', color: 'text-orange-400' },
   flashcard_node: { label: 'Creating flashcards...', emoji: '🃏', color: 'text-green-400' },
@@ -28,7 +28,7 @@ export default function ToolCallIndicator({ events, isStreaming }: Props) {
   return (
     <div className="flex flex-col gap-1.5 px-4 py-3">
       {events.map((ev, i) => {
-        const info = nodeMap[ev.node] ?? { label: ev.node, emoji: '⚙️', color: 'text-slate-400' };
+        const info = nodeMap[ev.node] ?? { label: ev.node, emoji: '⚙️', color: 'text-slate-600 dark:text-slate-400' };
         const isLast = i === events.length - 1;
         return (
           <div key={i} className={`flex items-center gap-2.5 slide-in ${isLast && isStreaming ? 'opacity-100' : 'opacity-60'}`}>

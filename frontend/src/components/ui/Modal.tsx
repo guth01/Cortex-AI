@@ -38,11 +38,11 @@ export default function Modal({ open, onClose, title, children, width = 'max-w-l
       {/* Panel */}
       <div className={`relative w-full ${width} glass rounded-2xl shadow-2xl fade-in`}>
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-[#1f2d4a]">
-          <h2 className="text-lg font-semibold text-slate-100">{title}</h2>
+        <div className="flex items-center justify-between p-6 border-b border-slate-200 dark:border-[#1f2d4a]">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{title}</h2>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-200 hover:bg-[#1e2640] rounded-lg p-1.5 transition-colors"
+            className="text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:text-slate-200 hover:bg-[#1e2640] rounded-lg p-1.5 transition-colors"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

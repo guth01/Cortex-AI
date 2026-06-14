@@ -33,14 +33,14 @@ export default function StudyPlanConfirm({ events, sessionId, onConfirm, onRejec
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-indigo-600/30 flex items-center justify-center text-lg">📅</div>
           <div className="text-left">
-            <p className="font-semibold text-slate-200 text-sm">Study Plan Ready</p>
+            <p className="font-semibold text-slate-800 dark:text-slate-200 text-sm">Study Plan Ready</p>
             <p className="text-xs text-slate-500">
               {events.length} sessions · {totalHours.toFixed(1)}h total
             </p>
           </div>
         </div>
         <svg
-          className={`w-5 h-5 text-slate-400 transition-transform ${expanded ? 'rotate-180' : ''}`}
+          className={`w-5 h-5 text-slate-600 dark:text-slate-400 transition-transform ${expanded ? 'rotate-180' : ''}`}
           fill="none" viewBox="0 0 24 24" stroke="currentColor"
         >
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -53,7 +53,7 @@ export default function StudyPlanConfirm({ events, sessionId, onConfirm, onRejec
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="border-b border-[#1f2d4a]">
+                <tr className="border-b border-slate-200 dark:border-[#1f2d4a]">
                   <th className="text-left text-slate-500 font-medium px-4 py-2">Date</th>
                   <th className="text-left text-slate-500 font-medium px-4 py-2">Topic</th>
                   <th className="text-left text-slate-500 font-medium px-4 py-2">Duration</th>
@@ -62,10 +62,10 @@ export default function StudyPlanConfirm({ events, sessionId, onConfirm, onRejec
               </thead>
               <tbody>
                 {events.map((ev, i) => (
-                  <tr key={i} className="border-b border-[#1f2d4a]/50 hover:bg-[#1e2640]/30">
-                    <td className="px-4 py-2 text-slate-300 whitespace-nowrap">{ev.date}</td>
-                    <td className="px-4 py-2 text-slate-300">{ev.topic}</td>
-                    <td className="px-4 py-2 text-slate-400 whitespace-nowrap">{ev.duration_minutes}min</td>
+                  <tr key={i} className="border-b border-slate-200 dark:border-[#1f2d4a]/50 hover:bg-[#1e2640]/30">
+                    <td className="px-4 py-2 text-slate-700 dark:text-slate-700 dark:text-slate-300 whitespace-nowrap">{ev.date}</td>
+                    <td className="px-4 py-2 text-slate-700 dark:text-slate-700 dark:text-slate-300">{ev.topic}</td>
+                    <td className="px-4 py-2 text-slate-600 dark:text-slate-400 whitespace-nowrap">{ev.duration_minutes}min</td>
                     <td className="px-4 py-2">
                       <Badge color={ev.coverage_level ? coverageColors[ev.coverage_level] ?? 'slate' : 'slate'}>
                         {ev.coverage_level ? ev.coverage_level.replace('_', ' ') : 'Manual'}

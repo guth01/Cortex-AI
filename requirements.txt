@@ -28,7 +28,7 @@ python-docx==1.1.0
 python-magic-bin==0.4.14  # Windows-specific
 
 # Embeddings & Tokenization
-sentence-transformers==2.3.1
+sentence-transformers>=2.6.0
 tiktoken==0.5.2
 
 # Google Integration
@@ -45,6 +45,5 @@ httpx==0.26.0
 aiofiles==23.2.1
 requests>=2.31.0
 tavily-python>=0.5.0   # Tavily web search (fallback strategy)
-
-# Optional (DeepL for translation)
-# deepl==1.17.0
+langdetect==1.0.9
+slowapi==0.1.9

@@ -31,8 +31,19 @@ export function useSubjects() {
   };
 
   const deleteSubject = async (id: string) => {
-    await apiClient.delete(`/subjects/${id}`);
+    // Optimistic update
+    const previous = [...subjects];
     setSubjects((prev) => prev.filter((s) => s.id !== id));
+    setError(null);
+    try {
+      await apiClient.delete(`/subjects/${id}`);
+    } catch (e: unknown) {
+      // Rollback on failure
+      setSubjects(previous);
+      const msg = e instanceof Error ? e.message : 'Failed to delete subject';
+      setError(msg);
+      throw new Error(msg);
+    }
   };
 
   return { subjects, loading, error, refetch: fetch, createSubject, deleteSubject };

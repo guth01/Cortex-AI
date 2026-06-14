@@ -107,9 +107,9 @@ async def upload_document(
     page_count = None
     try:
         if file_ext == "pdf":
-            from pypdf import PdfReader
-            reader = PdfReader(file_path)
-            page_count = len(reader.pages)
+            import fitz
+            with fitz.open(file_path) as doc:
+                page_count = len(doc)
     except Exception:
         pass  # Not critical if parsing fails
 

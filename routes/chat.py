@@ -29,7 +29,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
 from pydantic import BaseModel
 
-from routes.deps import get_db, get_current_user
+from routes.deps import get_db, get_current_user, limiter
 from db.chroma import get_session_collection
 from agent.graph import study_agent
 from agent.state import AgentState
@@ -123,47 +123,53 @@ async def stream_agent_response(
     # Thread config — required for MemorySaver checkpointer
     thread_config = {"configurable": {"thread_id": session_id}}
 
-    # ---- Stream intermediate node progress ----
+    # ---- Stream intermediate node progress and tokens ----
     try:
-        async for event in study_agent.astream(initial_state, config=thread_config):
-            for node_name, updates in event.items():
-                progress_data = {"type": "progress", "node": node_name}
+        async for mode, payload in study_agent.astream(initial_state, config=thread_config, stream_mode=["updates", "messages"]):
+            if mode == "updates":
+                for node_name, updates in payload.items():
+                    progress_data = {"type": "progress", "node": node_name}
 
-                if "intent" in updates:
-                    progress_data["intent"] = updates["intent"]
-                    print(f"[CHAT] Router → intent='{updates['intent']}'")
+                    if "intent" in updates:
+                        progress_data["intent"] = updates["intent"]
+                        print(f"[CHAT] Router → intent='{updates['intent']}'")
 
-                if "chunk_confidence" in updates:
-                    progress_data["confidence"] = round(updates["chunk_confidence"], 3)
-                    progress_data["chunks_found"] = len(updates.get("retrieved_chunks", []))
+                    if "chunk_confidence" in updates:
+                        progress_data["confidence"] = round(updates["chunk_confidence"], 3)
+                        progress_data["chunks_found"] = len(updates.get("retrieved_chunks", []))
 
-                # Sufficiency Judge progress
-                if "judge_verdict" in updates:
-                    progress_data["judge_verdict"] = updates["judge_verdict"]
-                    progress_data["judge_reason"] = updates.get("judge_reason", "")
-                    print(f"[CHAT] Judge → verdict='{updates['judge_verdict']}'")
+                    # Sufficiency Judge progress
+                    if "judge_verdict" in updates:
+                        progress_data["judge_verdict"] = updates["judge_verdict"]
+                        progress_data["judge_reason"] = updates.get("judge_reason", "")
+                        print(f"[CHAT] Judge → verdict='{updates['judge_verdict']}'")
 
-                if "tool_results" in updates:
-                    tr = updates["tool_results"]
-                    if "gap_analysis" in tr:
-                        gap = tr["gap_analysis"]
-                        progress_data["gap_analysis"] = {
-                            "well_covered": len(gap.get("well_covered", [])),
-                            "shallow": len(gap.get("shallow", [])),
-                            "missing": len(gap.get("missing", [])),
-                        }
-                    if "flashcards" in tr:
-                        progress_data["flashcards_created"] = tr["flashcards"].get("cards_created", 0)
-                    if "calendar_events" in tr:
-                        progress_data["events_created"] = len(tr.get("calendar_events", []))
+                    if "tool_results" in updates:
+                        tr = updates["tool_results"]
+                        if "gap_analysis" in tr:
+                            gap = tr["gap_analysis"]
+                            progress_data["gap_analysis"] = {
+                                "well_covered": len(gap.get("well_covered", [])),
+                                "shallow": len(gap.get("shallow", [])),
+                                "missing": len(gap.get("missing", [])),
+                            }
+                        if "flashcards" in tr:
+                            progress_data["flashcards_created"] = tr["flashcards"].get("cards_created", 0)
+                        if "calendar_events" in tr:
+                            progress_data["events_created"] = len(tr.get("calendar_events", []))
 
-                if "proposed_calendar_events" in updates:
-                    progress_data["events_proposed"] = len(updates["proposed_calendar_events"])
+                    if "proposed_calendar_events" in updates:
+                        progress_data["events_proposed"] = len(updates["proposed_calendar_events"])
 
-                if "web_results" in updates:
-                    progress_data["web_results_count"] = len(updates.get("web_results", []))
+                    if "web_results" in updates:
+                        progress_data["web_results_count"] = len(updates.get("web_results", []))
 
-                yield sse_event(progress_data, event="progress")
+                    yield sse_event(progress_data, event="progress")
+                    
+            elif mode == "messages":
+                chunk, metadata = payload
+                if metadata.get("langgraph_node") == "synthesis" and hasattr(chunk, "content") and chunk.content:
+                    yield sse_event({"type": "token", "content": chunk.content}, event="token")
 
     except Exception as e:
         print(f"[CHAT] Agent stream error: {e}")
@@ -323,7 +329,9 @@ async def stream_agent_response(
 # ============================================================================
 
 @router.post("/{session_id}")
+@limiter.limit("10/minute")
 async def chat(
+    request: Request,
     session_id: str,
     body: ChatMessage,
     current_user: dict = Depends(get_current_user),
@@ -410,7 +418,9 @@ async def chat(
 # ============================================================================
 
 @router.post("/{session_id}/choose-fallback")
+@limiter.limit("10/minute")
 async def choose_fallback(
+    request: Request,
     session_id: str,
     body: FallbackChoiceRequest,
     current_user: dict = Depends(get_current_user),
@@ -461,7 +471,7 @@ async def choose_fallback(
     if not pending:
         raise HTTPException(
             status_code=404,
-            detail="No pending fallback found for this session. Send a message first.",
+            detail="Session state was lost (likely due to a server restart). Please send your message again.",
         )
 
     judge_verdict = pending.get("judge_verdict", "INSUFFICIENT")
@@ -487,21 +497,28 @@ async def choose_fallback(
 
             # Step 2: Pass None to resume from the await_fallback_node interrupt.
             # Passing a dict here would restart the graph from scratch.
-            async for event in study_agent.astream(
+            async for mode, payload in study_agent.astream(
                 None,
                 config=thread_config,
+                stream_mode=["updates", "messages"],
             ):
-                for node_name, updates in event.items():
-                    progress_data = {"type": "progress", "node": node_name}
-
-                    if "web_results" in updates:
-                        progress_data["web_results_count"] = len(updates.get("web_results", []))
-                        print(f"[CHOOSE-FALLBACK] Tavily returned {len(updates.get('web_results', []))} results")
-
-                    if "answer_source" in updates:
-                        progress_data["answer_source"] = updates["answer_source"]
-
-                    yield sse_event(progress_data, event="progress")
+                if mode == "updates":
+                    for node_name, updates in payload.items():
+                        progress_data = {"type": "progress", "node": node_name}
+    
+                        if "web_results" in updates:
+                            progress_data["web_results_count"] = len(updates.get("web_results", []))
+                            print(f"[CHOOSE-FALLBACK] Tavily returned {len(updates.get('web_results', []))} results")
+    
+                        if "answer_source" in updates:
+                            progress_data["answer_source"] = updates["answer_source"]
+    
+                        yield sse_event(progress_data, event="progress")
+                        
+                elif mode == "messages":
+                    chunk, metadata = payload
+                    if metadata.get("langgraph_node") == "synthesis" and hasattr(chunk, "content") and chunk.content:
+                        yield sse_event({"type": "token", "content": chunk.content}, event="token")
 
         except Exception as e:
             print(f"[CHOOSE-FALLBACK] Graph resume error: {e}")
@@ -587,7 +604,9 @@ async def choose_fallback(
 # ============================================================================
 
 @router.post("/{session_id}/confirm-plan")
+@limiter.limit("5/minute")
 async def confirm_plan(
+    request: Request,
     session_id: str,
     body: ConfirmPlanRequest,
     current_user: dict = Depends(get_current_user),
@@ -623,7 +642,7 @@ async def confirm_plan(
     if not pending:
         raise HTTPException(
             status_code=404,
-            detail="No pending study plan found for this session. Generate a plan first.",
+            detail="Session state was lost (likely due to a server restart). Please ask the agent to generate the plan again.",
         )
 
     # Handle rejection
@@ -640,18 +659,24 @@ async def confirm_plan(
         try:
             # Resume graph from interrupt — LangGraph continues from where it stopped
             # (i.e., it now runs calendar_node → synthesis)
-            async for event in study_agent.astream(None, config=thread_config):
-                for node_name, updates in event.items():
-                    progress_data = {"type": "progress", "node": node_name}
-
-                    if "tool_results" in updates and "calendar_events" in updates["tool_results"]:
-                        events_created = updates["tool_results"]["calendar_events"]
-                        progress_data["events_created"] = len(events_created)
-                        progress_data["links"] = [
-                            e.get("html_link", "") for e in events_created if e.get("html_link")
-                        ]
-
-                    yield sse_event(progress_data, event="progress")
+            async for mode, payload in study_agent.astream(None, config=thread_config, stream_mode=["updates", "messages"]):
+                if mode == "updates":
+                    for node_name, updates in payload.items():
+                        progress_data = {"type": "progress", "node": node_name}
+    
+                        if "tool_results" in updates and "calendar_events" in updates["tool_results"]:
+                            events_created = updates["tool_results"]["calendar_events"]
+                            progress_data["events_created"] = len(events_created)
+                            progress_data["links"] = [
+                                e.get("html_link", "") for e in events_created if e.get("html_link")
+                            ]
+    
+                        yield sse_event(progress_data, event="progress")
+                        
+                elif mode == "messages":
+                    chunk, metadata = payload
+                    if metadata.get("langgraph_node") == "synthesis" and hasattr(chunk, "content") and chunk.content:
+                        yield sse_event({"type": "token", "content": chunk.content}, event="token")
 
         except Exception as e:
             print(f"[CONFIRM-PLAN] Graph resume error: {e}")
@@ -724,7 +749,9 @@ async def confirm_plan(
 # ============================================================================
 
 @router.post("/{session_id}/sync")
+@limiter.limit("10/minute")
 async def chat_sync(
+    request: Request,
     session_id: str,
     body: ChatMessage,
     current_user: dict = Depends(get_current_user),

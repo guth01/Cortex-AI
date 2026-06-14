@@ -14,7 +14,7 @@ import { useSessions } from '@/lib/hooks/useSessions';
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { subjects, loading: subjectsLoading, createSubject, deleteSubject } = useSubjects();
+  const { subjects, loading: subjectsLoading, error: subjectsError, createSubject, deleteSubject } = useSubjects();
   const { sessions, loading: sessionsLoading, refetch: refetchSessions } = useSessions();
   const [addModal, setAddModal] = useState(false);
   const [oauthSuccess, setOauthSuccess] = useState<string | null>(null);
@@ -52,7 +52,7 @@ export default function DashboardPage() {
         {/* Page header */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-slate-100">Dashboard</h1>
+            <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100">Dashboard</h1>
             <p className="text-slate-500 mt-1 text-sm">Manage your subjects and study sessions</p>
           </div>
           <Button onClick={() => setAddModal(true)}>
@@ -73,13 +73,13 @@ export default function DashboardPage() {
                 </svg>
               </div>
               <div>
-                <p className="text-sm font-medium text-slate-200">Google Calendar Connected!</p>
-                <p className="text-xs text-slate-400">
+                <p className="text-sm font-medium text-slate-800 dark:text-slate-200">Google Calendar Connected!</p>
+                <p className="text-xs text-slate-600 dark:text-slate-400">
                   Successfully linked with <strong>{oauthSuccess}</strong>. The agent can now create study sessions for you.
                 </p>
               </div>
             </div>
-            <button onClick={() => setOauthSuccess(null)} className="text-slate-500 hover:text-slate-300">
+            <button onClick={() => setOauthSuccess(null)} className="text-slate-500 hover:text-slate-700 dark:text-slate-700 dark:text-slate-300">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>
@@ -105,10 +105,19 @@ export default function DashboardPage() {
 
         {/* Subjects grid */}
         <section className="mb-10">
-          <h2 className="text-lg font-semibold text-slate-300 mb-4">
+          <h2 className="text-lg font-semibold text-slate-700 dark:text-slate-700 dark:text-slate-300 mb-4">
             Your Subjects
             <span className="ml-2 text-sm text-slate-600 font-normal">({subjects.length})</span>
           </h2>
+
+          {subjectsError && (
+            <div className="mb-4 p-3 rounded-lg border border-red-500/30 bg-red-500/10 flex items-center gap-3 fade-in">
+              <svg className="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <p className="text-sm text-red-500">{subjectsError}</p>
+            </div>
+          )}
 
           {subjectsLoading ? (
             <div className="flex items-center justify-center h-40">
@@ -117,10 +126,10 @@ export default function DashboardPage() {
           ) : subjects.length === 0 ? (
             <div
               onClick={() => setAddModal(true)}
-              className="border-2 border-dashed border-[#1f2d4a] rounded-2xl p-12 text-center cursor-pointer hover:border-indigo-500/50 hover:bg-[#111827] transition-all"
+              className="border-2 border-dashed border-slate-200 dark:border-[#1f2d4a] rounded-2xl p-12 text-center cursor-pointer hover:border-indigo-500/50 hover:bg-[#111827] transition-all"
             >
               <div className="text-4xl mb-3">📚</div>
-              <p className="text-slate-400 font-medium">No subjects yet</p>
+              <p className="text-slate-600 dark:text-slate-400 font-medium">No subjects yet</p>
               <p className="text-slate-600 text-sm mt-1">Click to add your first subject</p>
             </div>
           ) : (
@@ -135,7 +144,7 @@ export default function DashboardPage() {
               {/* Add new card */}
               <button
                 onClick={() => setAddModal(true)}
-                className="h-full min-h-[180px] border-2 border-dashed border-[#1f2d4a] rounded-xl p-5 text-center hover:border-indigo-500/50 hover:bg-[#111827] transition-all flex flex-col items-center justify-center gap-2 text-slate-600 hover:text-slate-400"
+                className="h-full min-h-[180px] border-2 border-dashed border-slate-200 dark:border-[#1f2d4a] rounded-xl p-5 text-center hover:border-indigo-500/50 hover:bg-[#111827] transition-all flex flex-col items-center justify-center gap-2 text-slate-600 hover:text-slate-600 dark:text-slate-400"
               >
                 <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
@@ -149,7 +158,7 @@ export default function DashboardPage() {
         {/* Recent sessions */}
         <section>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-slate-300">Recent Sessions</h2>
+            <h2 className="text-lg font-semibold text-slate-700 dark:text-slate-700 dark:text-slate-300">Recent Sessions</h2>
             <Link href="/history" className="text-sm text-indigo-400 hover:text-indigo-300 transition-colors">
               View all →
             </Link>
@@ -169,12 +178,12 @@ export default function DashboardPage() {
                 <Link
                   key={session.id}
                   href={`/history/${session.id}`}
-                  className="block p-4 rounded-xl border border-[#1f2d4a] bg-[#161d2e] hover:border-[#2a3a5c] hover:bg-[#1a2235] transition-all"
+                  className="block p-4 rounded-xl border border-slate-200 dark:border-[#1f2d4a] bg-[#161d2e] hover:border-[#2a3a5c] hover:bg-[#1a2235] transition-all"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <Badge color="green">Completed</Badge>
-                      <span className="text-slate-300 text-sm font-medium">
+                      <span className="text-slate-700 dark:text-slate-700 dark:text-slate-300 text-sm font-medium">
                         {subjectMap[session.subject_id] ?? 'Unknown Subject'}
                       </span>
                     </div>

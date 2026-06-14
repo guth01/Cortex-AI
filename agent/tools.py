@@ -32,27 +32,40 @@ from utils.embedder import get_embeddings
 # TOOL: search_notes
 # ============================================================================
 
-def search_notes(query: str, session_id: str, top_k: int = 5) -> dict:
+def search_notes(query: str, session_id: str, top_k: int = 3) -> dict:
     """
-    Semantic search over the session's ChromaDB collection.
+    Search the session's ChromaDB collection for relevant notes.
+    Automatically translates the query to English before searching since the embedding model is English-optimized.
 
     Args:
-        query:      Natural language query
-        session_id: Active session ID (maps to ChromaDB collection)
-        top_k:      Number of results to return (default 5)
+        query: User's query (in any language)
+        session_id: Active session ID
+        top_k: Number of chunks to retrieve
 
     Returns:
-        {
-            "chunks": [{"content": str, "metadata": dict, "score": float}],
-            "confidence": float,   # avg score of top-3 results
-            "found": bool
-        }
+        dict with chunks, confidence score, and found boolean
     """
     try:
+        # Detect language to avoid translating English queries
+        from langdetect import detect
+        try:
+            lang = detect(query)
+        except Exception:
+            lang = "en"  # fallback if detection fails
+
+        if lang != "en":
+            # Translate query to English for optimal embedding match against English notes
+            translated = translate_content(query, "EN")
+            search_query = translated.get("translated_text", query)
+            print(f"[TOOL:search_notes] Original query: '{query}'")
+            print(f"[TOOL:search_notes] Translated query: '{search_query}'")
+        else:
+            search_query = query
+
         vs = get_session_collection(session_id)
 
         # similarity_search_with_relevance_scores returns (Document, score) pairs
-        results = vs.similarity_search_with_relevance_scores(query, k=top_k)
+        results = vs.similarity_search_with_relevance_scores(search_query, k=top_k)
 
         if not results:
             return {"chunks": [], "confidence": 0.0, "found": False}
@@ -78,12 +91,10 @@ def search_notes(query: str, session_id: str, top_k: int = 5) -> dict:
 
     except ValueError as e:
         # ChromaDB collection doesn't exist (session ended / invalid)
-        print(f"[TOOL:search_notes] ChromaDB error: {e}")
-        return {"chunks": [], "confidence": 0.0, "found": False, "error": str(e)}
+        raise RuntimeError(f"Notes database error: {e}")
 
     except Exception as e:
-        print(f"[TOOL:search_notes] Unexpected error: {e}")
-        return {"chunks": [], "confidence": 0.0, "found": False, "error": str(e)}
+        raise RuntimeError(f"Unexpected error searching notes: {e}")
 
 
 # ============================================================================
@@ -145,7 +156,8 @@ async def summarize_topic(
 
 {depth_instruction}
 
-Use ONLY the provided notes as your primary source. If notes are insufficient, supplement with your knowledge but clearly indicate this."""
+Use ONLY the provided notes as your primary source. If notes are insufficient, supplement with your knowledge but clearly indicate this.
+Respond in the same language that the user's notes and topic are in."""
 
     user_prompt = f"""Topic: {topic}
 
@@ -248,6 +260,7 @@ async def create_study_session_event(
     duration_minutes: int,
     db,                     # AsyncIOMotorDatabase
     start_hour: int = 9,    # Default start time: 9 AM
+    start_time: str = None, # "HH:MM" 24-hour format
 ) -> dict:
     """
     Create a Google Calendar event for a study session.
@@ -273,15 +286,30 @@ async def create_study_session_event(
 
     try:
         service = await get_calendar_service(user_id, db)
+        loop = asyncio.get_event_loop()
 
-        # Build datetime strings in RFC3339 format
-        start_dt = datetime.strptime(date, "%Y-%m-%d").replace(
-            hour=start_hour, minute=0, second=0, tzinfo=timezone.utc
+        # Get user's actual timezone from their calendar
+        calendar_info = await loop.run_in_executor(
+            None,
+            lambda: service.calendars().get(calendarId="primary").execute()
         )
+        user_tz_str = calendar_info.get("timeZone", "UTC")
+
+        # Build naive datetimes
+        if start_time:
+            hh, mm = map(int, start_time.split(":"))
+            start_dt = datetime.strptime(date, "%Y-%m-%d").replace(
+                hour=hh, minute=mm, second=0
+            )
+        else:
+            start_dt = datetime.strptime(date, "%Y-%m-%d").replace(
+                hour=start_hour, minute=0, second=0
+            )
+        
         end_dt = start_dt + timedelta(minutes=duration_minutes)
 
         event_body = {
-            "summary": f"📚 Study: {subject}",
+            "summary": f"📚 Study: {subject} - {topic}" if topic else f"📚 Study: {subject}",
             "description": (
                 f"Study session for {subject}\n"
                 f"Duration: {duration_minutes} minutes\n"
@@ -289,11 +317,11 @@ async def create_study_session_event(
             ),
             "start": {
                 "dateTime": start_dt.isoformat(),
-                "timeZone": "UTC",
+                "timeZone": user_tz_str,
             },
             "end": {
                 "dateTime": end_dt.isoformat(),
-                "timeZone": "UTC",
+                "timeZone": user_tz_str,
             },
             "colorId": "2",      # Sage green — matches study theme
             "reminders": {
@@ -519,10 +547,8 @@ async def create_flashcards(
     """
     Generate flashcards on a topic using RAG + Gemini, then persist to Atlas.
 
-    Each card gets SM-2 algorithm fields initialized:
-        ease_factor: 2.5
-        interval_days: 1
-        due_date: tomorrow
+    Each card gets an initial status:
+        status: "upcoming"
 
     Args:
         topic:      Topic to generate flashcards for
@@ -565,6 +591,8 @@ Each object in the array must have exactly these fields:
   - "answer": concise but complete answer
   - "card_type": one of "definition", "concept", "application", "fact"
 
+Generate the flashcards in the same language as the provided topic and context.
+
 Example format:
 [{"question": "What is...", "answer": "It is...", "card_type": "definition"}]"""
 
@@ -591,13 +619,7 @@ Generate {num_cards} flashcards on "{topic}" based on the notes above."""
         if not isinstance(cards_data, list):
             raise ValueError("Expected a JSON array")
     except (json.JSONDecodeError, ValueError) as e:
-        print(f"[TOOL:flashcards] JSON parse error: {e}, raw={raw_content[:200]}")
-        # Fallback: create a single card
-        cards_data = [{
-            "question": f"What is {topic}?",
-            "answer": "Please review this topic in your notes.",
-            "card_type": "concept"
-        }]
+        raise RuntimeError(f"Failed to generate flashcards (invalid formatting from LLM): {e}")
 
     # Step 4: Persist to Atlas with SM-2 initial values
     tomorrow = datetime.utcnow() + timedelta(days=1)
@@ -614,11 +636,7 @@ Generate {num_cards} flashcards on "{topic}" based on the notes above."""
             "answer": card.get("answer", ""),
             "card_type": card.get("card_type", "concept"),
             "created_at": now,
-            # SM-2 initial values
-            "easiness_factor": 2.5,
-            "interval": 1,
-            "repetitions": 0,
-            "next_review": tomorrow,
+            "status": "upcoming",
         }
         card_docs.append(doc)
 
@@ -709,25 +727,23 @@ async def generate_exam_revision_sheet(
         f"*Generated: {now_str}*\n",
         "---\n",
         "## Knowledge Coverage Summary",
-        f"- ✅ **Well covered** ({len(gap.get('well_covered', []))} topics): "
+        f"- ✅ Well covered ({len(gap.get('well_covered', []))} topics): "
         f"{', '.join(gap.get('well_covered', [])) or 'none'}",
-        f"- ⚠️ **Needs work** ({len(gap.get('shallow', []))} topics): "
+        f"- ⚠️ Needs work ({len(gap.get('shallow', []))} topics): "
         f"{', '.join(gap.get('shallow', [])) or 'none'}",
-        f"- ❌ **Missing** ({len(gap.get('missing', []))} topics): "
+        f"- ❌ Missing ({len(gap.get('missing', []))} topics): "
         f"{', '.join(gap.get('missing', [])) or 'none'}",
         "\n---\n",
     ]
 
     # Step 3: Summarize each topic at exam_revision depth
-    # gemini-2.5-flash free tier = 5 RPM → 1 request every 12s minimum.
-    # Cap at 3 topics and sleep 13s between calls to stay safely under the limit.
+    # Cap at 3 topics and sleep 2s between calls to stay safely under the limit.
     capped_topics = all_topics[:3]
     print(f"[TOOL:revision_sheet] Summarizing {len(capped_topics)} topics (capped to 3 for rate limits)")
 
     for i, topic in enumerate(capped_topics):
-        # Rate-limit guard: 13s gap = ~4.6 RPM, safe for 5 RPM free tier
         if i > 0:
-            await asyncio.sleep(13)
+            await asyncio.sleep(2)
 
         print(f"[TOOL:revision_sheet] Summarizing topic: '{topic}'")
         try:

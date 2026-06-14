@@ -139,6 +139,14 @@ export default function SessionPage() {
           const pending = data as SSEPlanPending;
           setPendingPlan(pending.proposed_events ?? []);
 
+        } else if (event === 'token') {
+          const d = data as { content: string };
+          fullContent += d.content;
+          gotResponse = true;
+          setMessages((prev) =>
+            prev.map((m) => (m.id === asstMsgId ? { ...m, content: fullContent, streaming: true } : m))
+          );
+
         } else if (event === 'response') {
           const response = data as SSEResponse;
           fullContent = response.content ?? '';
@@ -191,7 +199,13 @@ export default function SessionPage() {
 
     try {
       await streamChooseFallback(sessionId, strategy, (event, data) => {
-        if (event === 'response') {
+        if (event === 'token') {
+          const d = data as { content: string };
+          fullContent += d.content;
+          setMessages((prev) =>
+            prev.map((m) => (m.id === asstMsgId ? { ...m, content: fullContent, streaming: true } : m))
+          );
+        } else if (event === 'response') {
           const d = data as SSEResponse;
           fullContent = d.content ?? '';
           setMessages((prev) =>
@@ -205,11 +219,11 @@ export default function SessionPage() {
           );
         }
       });
-    } catch {
+    } catch (e: unknown) {
       setMessages((prev) =>
         prev.map((m) =>
           m.id === asstMsgId
-            ? { ...m, content: '⚠ Could not get a response. Try again.', streaming: false }
+            ? { ...m, content: e instanceof Error ? `⚠ ${e.message}` : '⚠ Could not get a response. Try again.', streaming: false }
             : m
         )
       );
@@ -237,8 +251,9 @@ export default function SessionPage() {
         }
       });
       setPendingPlan(null);
-    } catch {
-      setMessages((prev) => [...prev, { id: `cal-err-${Date.now()}`, role: 'system', content: '⚠ Could not create calendar events.' }]);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Could not create calendar events.';
+      setMessages((prev) => [...prev, { id: `cal-err-${Date.now()}`, role: 'system', content: `⚠ ${msg}` }]);
     } finally {
       setConfirmingPlan(false);
     }
@@ -272,14 +287,14 @@ export default function SessionPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-[#0a0d14]">
+    <div className="flex flex-col h-screen bg-white dark:bg-[#0a0d14]">
       {/* Header */}
-      <header className="flex-shrink-0 glass border-b border-[#1f2d4a] px-6 py-4">
+      <header className="flex-shrink-0 glass border-b border-slate-200 dark:border-[#1f2d4a] px-6 py-4">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="font-semibold text-slate-100">{subjectName || 'Study Session'}</h1>
+                <h1 className="font-semibold text-slate-900 dark:text-slate-100">{subjectName || 'Study Session'}</h1>
                 <Badge color="green">
                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot" />
                   Active
@@ -310,7 +325,7 @@ export default function SessionPage() {
           {messages.length === 0 && !isStreaming && (
             <div className="text-center py-16 fade-in">
               <div className="text-5xl mb-4">🧠</div>
-              <h2 className="text-xl font-semibold text-slate-300 mb-2">Ready to study!</h2>
+              <h2 className="text-xl font-semibold text-slate-700 dark:text-slate-300 mb-2">Ready to study!</h2>
               <p className="text-slate-500 text-sm max-w-md mx-auto">
                 Ask questions about your documents, request a quiz, generate flashcards, or ask me to build a study plan.
               </p>
@@ -319,7 +334,7 @@ export default function SessionPage() {
                   <button
                     key={s}
                     onClick={() => { setInput(s); inputRef.current?.focus(); }}
-                    className="px-3 py-1.5 text-xs text-slate-400 border border-[#1f2d4a] rounded-full hover:border-indigo-500/50 hover:text-indigo-400 transition-all"
+                    className="px-3 py-1.5 text-xs text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-[#1f2d4a] rounded-full hover:border-indigo-500/50 hover:text-indigo-400 transition-all"
                   >
                     {s}
                   </button>
@@ -339,16 +354,16 @@ export default function SessionPage() {
               ) : (
                 <div
                   className={`max-w-[80%] px-4 py-3 text-sm leading-relaxed ${
-                    msg.role === 'user' ? 'chat-user text-white' : 'chat-assistant text-slate-200'
+                    msg.role === 'user' ? 'chat-user text-white' : 'chat-assistant text-slate-800 dark:text-slate-200'
                   }`}
                 >
                   {msg.streaming ? (
-                    <span className="flex items-center gap-1.5 text-slate-400">
+                    <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
                       <Spinner size="sm" />
                       <span>Thinking...</span>
                     </span>
                   ) : (
-                    <div className="prose prose-invert prose-sm max-w-none leading-relaxed text-slate-200">
+                    <div className="prose dark:prose-invert prose-sm max-w-none leading-relaxed text-slate-800 dark:text-slate-200">
                       <ReactMarkdown>{msg.content}</ReactMarkdown>
                     </div>
                   )}
@@ -385,7 +400,7 @@ export default function SessionPage() {
                 </div>
 
                 {/* Message */}
-                <p className="text-slate-200 text-sm font-medium mb-1">
+                <p className="text-slate-800 dark:text-slate-200 text-sm font-medium mb-1">
                   {pendingFallback.message}
                 </p>
                 <p className="text-slate-500 text-xs mb-4 leading-relaxed">
@@ -393,7 +408,7 @@ export default function SessionPage() {
                 </p>
 
                 {/* Choice buttons */}
-                <p className="text-slate-400 text-xs uppercase tracking-wider mb-3 font-semibold">
+                <p className="text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider mb-3 font-semibold">
                   How would you like to proceed?
                 </p>
                 <div className="flex flex-col sm:flex-row gap-3">
@@ -457,7 +472,7 @@ export default function SessionPage() {
       </div>
 
       {/* Input area */}
-      <div className="flex-shrink-0 glass border-t border-[#1f2d4a] px-4 py-4">
+      <div className="flex-shrink-0 glass border-t border-slate-200 dark:border-[#1f2d4a] px-4 py-4">
         <div className="max-w-4xl mx-auto flex gap-3 items-end">
           <div className="flex-1 relative">
             <textarea
@@ -468,7 +483,7 @@ export default function SessionPage() {
               placeholder="Ask a question, request a quiz, or say 'make a study plan'..."
               rows={1}
               disabled={isStreaming || choosingFallback || session?.status !== 'active'}
-              className="w-full px-4 py-3 rounded-xl bg-[#0f1623] border border-[#1f2d4a] text-slate-100 placeholder-slate-600 text-sm resize-none transition-all disabled:opacity-50 max-h-32"
+              className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-[#0f1623] border border-slate-200 dark:border-[#1f2d4a] text-slate-900 dark:text-slate-100 placeholder-slate-600 text-sm resize-none transition-all disabled:opacity-50 max-h-32"
               style={{ minHeight: '48px' }}
             />
           </div>

@@ -32,14 +32,19 @@ def load_documents(file_path: str, source_type: str) -> List[Document]:
 
     if source_type == "pdf":
         try:
-            from langchain_community.document_loaders import PyMuPDFLoader
-            loader = PyMuPDFLoader(file_path)
-            docs = loader.load()
+            import pymupdf4llm
+            md_text = pymupdf4llm.to_markdown(file_path)
+            docs = [Document(page_content=md_text, metadata={"source": file_path, "format": "markdown"})]
         except ImportError:
-            print("⚠️ PyMuPDF not found. Falling back to PyPDFLoader. Run `pip install pymupdf` for better PDF text extraction.")
-            from langchain_community.document_loaders import PyPDFLoader
-            loader = PyPDFLoader(file_path)
-            docs = loader.load()
+            try:
+                from langchain_community.document_loaders import PyMuPDFLoader
+                loader = PyMuPDFLoader(file_path)
+                docs = loader.load()
+            except ImportError:
+                print("⚠️ PyMuPDF not found. Falling back to PyPDFLoader. Run `pip install pymupdf` for better PDF text extraction.")
+                from langchain_community.document_loaders import PyPDFLoader
+                loader = PyPDFLoader(file_path)
+                docs = loader.load()
 
     elif source_type == "docx":
         from langchain_community.document_loaders import Docx2txtLoader

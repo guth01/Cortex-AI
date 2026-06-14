@@ -6,47 +6,29 @@ import Badge from '@/components/ui/Badge';
 
 interface Props {
   card: Flashcard;
-  onReview: (id: string, quality: number) => Promise<void>;
+  onMarkDone: (id: string) => Promise<void>;
 }
 
-export default function FlashCardComponent({ card, onReview }: Props) {
+export default function FlashCardComponent({ card, onMarkDone }: Props) {
   const [flipped, setFlipped] = useState(false);
   const [reviewing, setReviewing] = useState(false);
-  const [done, setDone] = useState(false);
 
-  const isDue = new Date(card.next_review) <= new Date();
-
-  const handleReview = async (quality: number) => {
+  const handleMarkDone = async () => {
     setReviewing(true);
     try {
-      await onReview(card.id, quality);
-      setDone(true);
+      await onMarkDone(card.id);
     } finally {
       setReviewing(false);
     }
   };
 
-  if (done) {
-    return (
-      <div className="h-56 flex items-center justify-center rounded-2xl border border-[#1f2d4a] bg-[#161d2e]">
-        <div className="text-center text-slate-500">
-          <div className="text-3xl mb-2">✓</div>
-          <p className="text-sm">Reviewed</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-3">
       {/* Due badge */}
       <div className="flex items-center gap-2">
-        {isDue && <Badge color="yellow">Due now</Badge>}
         {card.topic && <Badge color="slate">{card.topic}</Badge>}
         <Badge color="indigo">{card.card_type}</Badge>
-        <span className="text-xs text-slate-600 ml-auto">
-          Rep #{card.repetitions} · EF {card.easiness_factor.toFixed(2)}
-        </span>
+        {card.status === 'done' && <Badge color="green">Done</Badge>}
       </div>
 
       {/* Card */}
@@ -56,46 +38,30 @@ export default function FlashCardComponent({ card, onReview }: Props) {
       >
         <div className="flip-card-inner">
           {/* Front — question */}
-          <div className="flip-card-front bg-[#161d2e] border border-[#1f2d4a] p-6 flex flex-col items-center justify-center text-center">
+          <div className="flip-card-front bg-[#161d2e] border border-slate-200 dark:border-[#1f2d4a] p-6 flex flex-col items-center justify-center text-center">
             <p className="text-xs text-indigo-400 font-medium mb-3 uppercase tracking-wide">Question</p>
-            <p className="text-slate-100 text-base font-medium leading-relaxed">{card.question}</p>
+            <p className="text-slate-900 dark:text-slate-100 text-base font-medium leading-relaxed">{card.question}</p>
             <p className="text-xs text-slate-600 mt-4">Click to reveal answer</p>
           </div>
 
           {/* Back — answer */}
           <div className="flip-card-back bg-gradient-to-br from-indigo-900/40 to-purple-900/30 border border-indigo-500/30 p-6 flex flex-col items-center justify-center text-center">
             <p className="text-xs text-purple-400 font-medium mb-3 uppercase tracking-wide">Answer</p>
-            <p className="text-slate-100 text-base leading-relaxed">{card.answer}</p>
+            <p className="text-slate-900 dark:text-slate-100 text-base leading-relaxed">{card.answer}</p>
           </div>
         </div>
       </div>
 
       {/* Review buttons — only after flip */}
-      {flipped && (
-        <div className="flex gap-3 fade-in">
-          <Button
-            variant="danger"
-            loading={reviewing}
-            onClick={() => handleReview(1)}
-            className="flex-1"
-          >
-            ✗ Didn&apos;t Know
-          </Button>
-          <Button
-            variant="secondary"
-            loading={reviewing}
-            onClick={() => handleReview(3)}
-            className="flex-1"
-          >
-            ~ Kinda Knew
-          </Button>
+      {flipped && card.status === 'upcoming' && (
+        <div className="flex gap-3 fade-in mt-4">
           <Button
             variant="success"
             loading={reviewing}
-            onClick={() => handleReview(5)}
-            className="flex-1"
+            onClick={handleMarkDone}
+            className="w-full"
           >
-            ✓ Knew It
+            ✓ Mark as Done
           </Button>
         </div>
       )}

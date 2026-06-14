@@ -12,10 +12,10 @@ export default function FlashcardsPage() {
   const [activeSubject, setActiveSubject] = useState<string>('all');
 
   const subjectIdFilter = activeSubject === 'all' ? undefined : activeSubject;
-  const { flashcards, loading: cardsLoading, reviewCard } = useFlashcards(subjectIdFilter);
+  const { flashcards, loading: cardsLoading, markDone } = useFlashcards(subjectIdFilter);
 
-  const unreviewedCards = flashcards.filter((c) => c.repetitions === 0);
-  const reviewedCards = flashcards.filter((c) => c.repetitions > 0);
+  const unreviewedCards = flashcards.filter((c) => c.status === 'upcoming');
+  const reviewedCards = flashcards.filter((c) => c.status === 'done');
 
   return (
     <>
@@ -24,7 +24,7 @@ export default function FlashcardsPage() {
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-slate-100">Flashcards</h1>
+            <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100">Flashcards</h1>
           </div>
           <div className="flex gap-3">
             <div className="text-center">
@@ -32,7 +32,7 @@ export default function FlashcardsPage() {
               <p className="text-xs text-slate-600">To Review</p>
             </div>
             <div className="text-center">
-              <p className="text-2xl font-bold text-slate-400">{reviewedCards.length}</p>
+              <p className="text-2xl font-bold text-slate-600 dark:text-slate-400">{reviewedCards.length}</p>
               <p className="text-xs text-slate-600">Done</p>
             </div>
           </div>
@@ -46,7 +46,7 @@ export default function FlashcardsPage() {
               className={`px-4 py-2 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
                 activeSubject === 'all'
                   ? 'bg-indigo-600/20 text-indigo-400 border border-indigo-500/30'
-                  : 'text-slate-500 hover:text-slate-300 hover:bg-[#1e2640] border border-transparent'
+                  : 'text-slate-500 hover:text-slate-700 dark:text-slate-300 hover:bg-[#1e2640] border border-transparent'
               }`}
             >
               All Subjects
@@ -58,7 +58,7 @@ export default function FlashcardsPage() {
                 className={`px-4 py-2 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
                   activeSubject === s.id
                     ? 'bg-indigo-600/20 text-indigo-400 border border-indigo-500/30'
-                    : 'text-slate-500 hover:text-slate-300 hover:bg-[#1e2640] border border-transparent'
+                    : 'text-slate-500 hover:text-slate-700 dark:text-slate-300 hover:bg-[#1e2640] border border-transparent'
                 }`}
               >
                 {s.name}
@@ -72,7 +72,7 @@ export default function FlashcardsPage() {
         ) : flashcards.length === 0 ? (
           <div className="text-center py-16">
             <div className="text-5xl mb-4">🃏</div>
-            <p className="text-slate-400 font-medium">No flashcards yet</p>
+            <p className="text-slate-600 dark:text-slate-400 font-medium">No flashcards yet</p>
             <p className="text-slate-600 text-sm mt-2">
               Start a study session and ask the agent to create flashcards from your notes.
             </p>
@@ -83,28 +83,44 @@ export default function FlashcardsPage() {
             {unreviewedCards.length > 0 && (
               <section>
                 <div className="flex items-center gap-2 mb-4">
-                  <h2 className="text-base font-semibold text-slate-300">To Review</h2>
+                  <h2 className="text-base font-semibold text-slate-700 dark:text-slate-300">To Review</h2>
                   <Badge color="yellow">{unreviewedCards.length}</Badge>
                 </div>
                 <div className="space-y-6">
                   {unreviewedCards.map((card) => (
                     <div key={card.id} className="glass rounded-2xl p-5">
-                      <FlashCardComponent card={card} onReview={reviewCard} />
+                      <FlashCardComponent card={card} onMarkDone={markDone} />
                     </div>
                   ))}
                 </div>
               </section>
             )}
 
-            {/* Note: Reviewed cards are intentionally hidden from this view to keep it clean */}
             {unreviewedCards.length === 0 && reviewedCards.length > 0 && (
-              <div className="text-center py-16">
+              <div className="text-center py-12">
                 <div className="text-5xl mb-4">🎉</div>
-                <p className="text-slate-200 font-medium text-xl">All caught up!</p>
+                <p className="text-slate-800 dark:text-slate-200 font-medium text-xl">All caught up!</p>
                 <p className="text-slate-500 text-sm mt-2">
-                  You have reviewed all {reviewedCards.length} flashcards for this subject.
+                  You have completed all your upcoming flashcards.
                 </p>
               </div>
+            )}
+
+            {/* Done */}
+            {reviewedCards.length > 0 && (
+              <section className="mt-12 border-t border-slate-200 dark:border-slate-800 pt-8">
+                <div className="flex items-center gap-2 mb-4">
+                  <h2 className="text-base font-semibold text-slate-700 dark:text-slate-300">Done</h2>
+                  <Badge color="green">{reviewedCards.length}</Badge>
+                </div>
+                <div className="space-y-6 opacity-80">
+                  {reviewedCards.map((card) => (
+                    <div key={card.id} className="glass rounded-2xl p-5">
+                      <FlashCardComponent card={card} onMarkDone={markDone} />
+                    </div>
+                  ))}
+                </div>
+              </section>
             )}
           </div>
         )}

@@ -51,7 +51,7 @@ export default function SessionHistoryPage() {
         {/* Back */}
         <Link
           href="/history"
-          className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-300 mb-6 transition-colors"
+          className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 dark:text-slate-300 mb-6 transition-colors"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -67,7 +67,7 @@ export default function SessionHistoryPage() {
                 <Badge color={session.status === 'completed' ? 'green' : session.status === 'active' ? 'yellow' : 'red'}>
                   {session.status}
                 </Badge>
-                <h1 className="text-xl font-bold text-slate-100">{subjectName || 'Study Session'}</h1>
+                <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">{subjectName || 'Study Session'}</h1>
               </div>
               <div className="flex items-center gap-4 text-xs text-slate-500">
                 <span>📅 {format(new Date(session.started_at.endsWith('Z') ? session.started_at : session.started_at + 'Z'), 'MMMM d, yyyy · h:mm a')}</span>
@@ -84,18 +84,18 @@ export default function SessionHistoryPage() {
 
           {/* Summary */}
           {session.summary && (
-            <div className="mt-4 pt-4 border-t border-[#1f2d4a]">
+            <div className="mt-4 pt-4 border-t border-slate-200 dark:border-[#1f2d4a]">
               <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Session Summary</p>
-              <p className="text-slate-300 text-sm leading-relaxed">{session.summary}</p>
+              <p className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed">{session.summary}</p>
             </div>
           )}
 
           {/* Evaluator scores — Day 7 placeholder */}
-          <div className="mt-4 pt-4 border-t border-[#1f2d4a]">
+          <div className="mt-4 pt-4 border-t border-slate-200 dark:border-[#1f2d4a]">
             <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-3">Evaluator Scores</p>
             <div className="grid grid-cols-3 gap-3">
               {['Relevance', 'Depth', 'Accuracy'].map((label) => (
-                <div key={label} className="text-center p-3 rounded-xl bg-[#0f1623] border border-[#1f2d4a]">
+                <div key={label} className="text-center p-3 rounded-xl bg-slate-50 dark:bg-[#0f1623] border border-slate-200 dark:border-[#1f2d4a]">
                   <p className="text-2xl font-bold text-slate-600">—</p>
                   <p className="text-xs text-slate-600 mt-0.5">{label}</p>
                 </div>
@@ -107,7 +107,7 @@ export default function SessionHistoryPage() {
 
         {/* Transcript */}
         <div className="glass rounded-2xl p-6">
-          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-6">
+          <h2 className="text-sm font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide mb-6">
             Full Transcript
           </h2>
           {session.transcript.length === 0 ? (
@@ -135,10 +135,10 @@ export default function SessionHistoryPage() {
                     </div>
                     <div
                       className={`px-4 py-3 text-sm leading-relaxed ${
-                        msg.role === 'user' ? 'chat-user text-white' : 'chat-assistant text-slate-200'
+                        msg.role === 'user' ? 'chat-user text-white' : 'chat-assistant text-slate-800 dark:text-slate-200'
                       }`}
                     >
-                      <div className="prose prose-invert prose-sm max-w-none leading-relaxed text-slate-200">
+                      <div className="prose dark:prose-invert prose-sm max-w-none leading-relaxed text-slate-800 dark:text-slate-200">
                         <ReactMarkdown>{msg.content}</ReactMarkdown>
                       </div>
                     </div>

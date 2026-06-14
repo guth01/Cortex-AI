@@ -77,6 +77,7 @@ class SessionCreate(BaseModel):
     subject_id: str
     document_ids: List[str]
     topics: List[str] = []
+    chunking_strategy: str = "document_aware"
 
 
 class SessionStartResponse(BaseModel):
@@ -125,11 +126,7 @@ class FlashcardResponse(BaseModel):
     topic: str = ""
     created_at: datetime
 
-    # SM-2 Algorithm fields
-    easiness_factor: float = 2.5
-    interval: int = 0
-    repetitions: int = 0
-    next_review: datetime
+    status: str = "upcoming"
 
 
 # ============= DAY 5 — GOOGLE CALENDAR + PLANNING MODELS =============

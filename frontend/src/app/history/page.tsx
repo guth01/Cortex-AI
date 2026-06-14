@@ -23,7 +23,7 @@ export default function HistoryPage() {
       <Navbar />
       <main className="pt-24 pb-12 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-slate-100">Session History</h1>
+          <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100">Session History</h1>
           <p className="text-slate-500 mt-1 text-sm">All your past study sessions</p>
         </div>
 
@@ -32,7 +32,7 @@ export default function HistoryPage() {
         ) : sessions.length === 0 ? (
           <div className="text-center py-16">
             <div className="text-5xl mb-4">📜</div>
-            <p className="text-slate-400 font-medium">No sessions yet</p>
+            <p className="text-slate-600 dark:text-slate-400 font-medium">No sessions yet</p>
             <p className="text-slate-600 text-sm mt-2">
               Start your first session from the dashboard.
             </p>
@@ -51,7 +51,7 @@ export default function HistoryPage() {
                       <Badge color={statusColors[session.status] ?? 'slate'}>
                         {session.status}
                       </Badge>
-                      <h3 className="font-medium text-slate-200 text-sm truncate">
+                      <h3 className="font-medium text-slate-800 dark:text-slate-200 text-sm truncate">
                         {subjectMap[session.subject_id] ?? 'Unknown Subject'}
                       </h3>
                     </div>

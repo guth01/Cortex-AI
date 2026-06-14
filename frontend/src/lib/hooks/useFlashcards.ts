@@ -14,9 +14,7 @@ export function useFlashcards(subjectId?: string) {
     try {
       const params = subjectId ? { subject_id: subjectId } : {};
       const { data } = await apiClient.get<Flashcard[]>('/flashcards', { params });
-      // Sort: unreviewed (repetitions = 0) cards first
-      const sorted = [...data].sort((a, b) => a.repetitions - b.repetitions);
-      setFlashcards(sorted);
+      setFlashcards(data);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to load flashcards');
     } finally {
@@ -26,25 +24,25 @@ export function useFlashcards(subjectId?: string) {
 
   useEffect(() => { fetch(); }, [fetch]);
 
-  const reviewCard = async (id: string, quality: number) => {
-    // Optimistic update: mark it as reviewed immediately to prevent UI jumps
+  const markDone = async (id: string) => {
+    // Optimistic update: mark it as done immediately to prevent UI jumps
     setFlashcards((prev) =>
       prev.map((card) => {
         if (card.id === id) {
-          // Optimistically mark as reviewed
-          return { ...card, repetitions: card.repetitions + 1 };
+          // Optimistically mark as done
+          return { ...card, status: 'done' };
         }
         return card;
       })
     );
     
     try {
-      await apiClient.post(`/flashcards/${id}/review`, { quality });
+      await apiClient.post(`/flashcards/${id}/mark-done`);
     } catch {
       // Revert on error
       await fetch();
     }
   };
 
-  return { flashcards, loading, error, refetch: fetch, reviewCard };
+  return { flashcards, loading, error, refetch: fetch, markDone };
 }

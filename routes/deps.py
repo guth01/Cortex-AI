@@ -8,6 +8,11 @@ from fastapi import Depends, HTTPException, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from auth import get_current_user_email
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+# Global rate limiter
+limiter = Limiter(key_func=get_remote_address)
 
 
 # Global database reference — set by server.py on startup

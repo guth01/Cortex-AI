@@ -7,6 +7,7 @@ Uses tiktoken for accurate token-based chunk sizing.
 from typing import List, Dict
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
+from langchain_text_splitters import MarkdownHeaderTextSplitter
 
 
 # Default configuration
@@ -58,6 +59,50 @@ def split_documents(
     """
     splitter = get_text_splitter(chunk_size, chunk_overlap)
     return splitter.split_documents(documents)
+
+
+def split_documents_document_aware(
+    documents: List[Document],
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
+    chunk_overlap: int = DEFAULT_OVERLAP,
+) -> List[Document]:
+    """
+    Split LangChain Documents into smaller chunks, respecting document structure.
+    Uses MarkdownHeaderTextSplitter for structure, then RecursiveCharacterTextSplitter.
+
+    Metadata from original documents and headers is preserved in each chunk.
+
+    Args:
+        documents: List of LangChain Document objects
+        chunk_size: Max tokens per chunk
+        chunk_overlap: Overlap tokens between chunks
+
+    Returns:
+        List of chunked Document objects with preserved metadata
+    """
+    headers_to_split_on = [
+        ("#", "Header 1"),
+        ("##", "Header 2"),
+        ("###", "Header 3"),
+    ]
+    markdown_splitter = MarkdownHeaderTextSplitter(
+        headers_to_split_on=headers_to_split_on, strip_headers=False
+    )
+    
+    md_docs = []
+    for doc in documents:
+        # Check if format is markdown or if we want to try parsing it anyway
+        # Langchain's MarkdownHeaderTextSplitter works well on raw text too (it just won't find headers if there are none)
+        splits = markdown_splitter.split_text(doc.page_content)
+        for split in splits:
+            combined_meta = doc.metadata.copy()
+            combined_meta.update(split.metadata)
+            split.metadata = combined_meta
+        md_docs.extend(splits)
+
+    # Now use RecursiveCharacterTextSplitter on these splits to enforce chunk size
+    text_splitter = get_text_splitter(chunk_size, chunk_overlap)
+    return text_splitter.split_documents(md_docs)
 
 
 def split_text(

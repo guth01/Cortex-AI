@@ -48,7 +48,7 @@ export default function DocumentList({ documents, selectedIds, onToggle, onDelet
               ${showCheckboxes ? 'cursor-pointer' : ''}
               ${isSelected
                 ? 'border-indigo-500/60 bg-indigo-500/10'
-                : 'border-[#1f2d4a] bg-[#161d2e] hover:border-[#2a3a5c]'
+                : 'border-slate-200 dark:border-[#1f2d4a] bg-[#161d2e] hover:border-[#2a3a5c]'
               }
             `}
           >
@@ -69,7 +69,7 @@ export default function DocumentList({ documents, selectedIds, onToggle, onDelet
 
             {/* Info */}
             <div className="flex-1 min-w-0">
-              <p className="text-slate-200 text-sm font-medium truncate">{doc.filename}</p>
+              <p className="text-slate-800 dark:text-slate-200 text-sm font-medium truncate">{doc.filename}</p>
               <div className="flex items-center gap-2 mt-1">
                 <Badge color={typeColors[doc.source_type] ?? 'slate'}>
                   {doc.source_type.toUpperCase()}

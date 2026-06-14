@@ -5,6 +5,24 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 :root {
+  --bg-primary: #f8fafc;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f1f5f9;
+  --border: #e2e8f0;
+  --border-light: #cbd5e1;
+  --accent: #6366f1;
+  --accent-hover: #4f52d9;
+  --accent-glow: rgba(99, 102, 241, 0.3);
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+}
+
+.dark {
   --bg-primary: #0a0d14;
   --bg-secondary: #111827;
   --bg-card: #161d2e;
@@ -40,9 +58,13 @@ html, body {
 
 /* Glassmorphism card */
 .glass {
-  background: rgba(22, 29, 46, 0.8);
+  background: rgba(255, 255, 255, 0.8);
   backdrop-filter: blur(16px);
   border: 1px solid var(--border);
+}
+
+.dark .glass {
+  background: rgba(22, 29, 46, 0.8);
 }
 
 /* Animated gradient border */

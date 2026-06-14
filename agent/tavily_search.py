@@ -38,8 +38,7 @@ async def tavily_search(query: str, max_results: int = 5) -> list[dict]:
     api_key = os.getenv("TAVILY_KEY", "").strip()
 
     if not api_key:
-        print("[TAVILY] TAVILY_KEY not set in environment — skipping web search")
-        return []
+        raise ValueError("TAVILY_KEY not set in environment. Web search is unavailable.")
 
     print(f"[TAVILY] query='{query[:120]}', max_results={max_results}")
 
@@ -76,15 +75,10 @@ async def tavily_search(query: str, max_results: int = 5) -> list[dict]:
         return results
 
     except ImportError:
-        print(
-            "[TAVILY] tavily-python package not installed. "
-            "Run: pip install tavily-python"
-        )
-        return []
+        raise ImportError("tavily-python package not installed. Run: pip install tavily-python")
 
     except Exception as exc:
-        print(f"[TAVILY] Search failed: {type(exc).__name__}: {exc}")
-        return []
+        raise RuntimeError(f"Tavily search failed: {exc}")
 
 
 # ---------------------------------------------------------------------------

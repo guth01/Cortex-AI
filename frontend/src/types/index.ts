@@ -67,10 +67,7 @@ export interface Flashcard {
   card_type: string;
   topic: string;
   created_at: string;
-  easiness_factor: number;
-  interval: number;
-  repetitions: number;
-  next_review: string;
+  status: 'upcoming' | 'done';
 }
 
 export interface StudyPlanEvent {

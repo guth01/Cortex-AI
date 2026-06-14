@@ -27,7 +27,8 @@ def load_model() -> HuggingFaceEmbeddings:
         print(f"[EMBEDDER] Loading model: {MODEL_NAME}")
         _embeddings = HuggingFaceEmbeddings(
             model_name=MODEL_NAME,
-            encode_kwargs={'normalize_embeddings': True}
+            model_kwargs={'device': 'cpu'},
+            encode_kwargs={'normalize_embeddings': True},
         )
         # Warm up with a test embedding
         _embeddings.embed_query("test")
