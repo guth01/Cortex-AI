@@ -141,9 +141,14 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
+frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+allow_origins_list = ["http://localhost:3000"]
+if frontend_url and frontend_url not in allow_origins_list:
+    allow_origins_list.append(frontend_url)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=allow_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
