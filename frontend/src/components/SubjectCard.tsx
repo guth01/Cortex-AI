@@ -57,7 +57,7 @@ export default function SubjectCard({ subject, onDelete, onStartSession }: Props
                 setIsDeleting(true);
                 try {
                   await onDelete(subject.id); 
-                } catch (err) {
+                } catch (_err) {
                   setIsDeleting(false);
                 }
               }}

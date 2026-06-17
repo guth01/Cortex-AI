@@ -6,7 +6,7 @@ import Button from '@/components/ui/Button';
 interface Props {
   open: boolean;
   onClose: () => void;
-  onCreate: (name: string, examDate?: string) => Promise<any>;
+  onCreate: (name: string, examDate?: string) => Promise<unknown>;
 }
 
 export default function AddSubjectModal({ open, onClose, onCreate }: Props) {

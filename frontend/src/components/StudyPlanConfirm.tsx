@@ -19,7 +19,7 @@ const coverageColors: Record<string, 'red' | 'yellow' | 'green'> = {
   well_covered: 'green',
 };
 
-export default function StudyPlanConfirm({ events, sessionId, onConfirm, onReject, loading }: Props) {
+export default function StudyPlanConfirm({ events, onConfirm, onReject, loading }: Props) {
   const [expanded, setExpanded] = useState(true);
 
   const totalHours = events.reduce((sum, e) => sum + e.duration_minutes, 0) / 60;

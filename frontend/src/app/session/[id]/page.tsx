@@ -2,7 +2,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { BookOpen, AlertTriangle, XCircle } from 'lucide-react';
-import Navbar from '@/components/Navbar';
 import ToolCallIndicator from '@/components/ToolCallIndicator';
 import StudyPlanConfirm from '@/components/StudyPlanConfirm';
 import StreamingMessage from '@/components/StreamingMessage';

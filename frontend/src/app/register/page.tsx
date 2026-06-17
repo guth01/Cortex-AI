@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useGoogleLogin } from '@react-oauth/google';
 import apiClient, { setToken } from '@/lib/apiClient';
-import { Eye, EyeOff, Mail, Lock, User, BookOpen, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, User, Loader2 } from 'lucide-react';
 
 export default function RegisterPage() {
   const router = useRouter();
