@@ -27,8 +27,6 @@ load_dotenv()
 # MongoDB client (global for lifespan management)
 mongo_client: AsyncIOMotorClient = None
 
-# Upload configuration
-UPLOAD_DIR = Path("./uploads")
 
 
 @asynccontextmanager
@@ -84,11 +82,6 @@ async def lifespan(app: FastAPI):
         await database.flashcards.create_index([("user_id", 1), ("due_date", 1)])
         print("  ✓ Compound index on flashcards.user_id + due_date (for spaced repetition)")
 
-        # Create uploads directory
-        print("\n📁 Setting up file storage...")
-        UPLOAD_DIR.mkdir(exist_ok=True)
-        print(f"  ✓ Upload directory ready: {UPLOAD_DIR.absolute()}")
-
         # Embedder is now lazy-loaded on first use
         # (This drastically speeds up backend startup)
 
@@ -141,7 +134,7 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
-frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
 allow_origins_list = ["http://localhost:3000"]
 if frontend_url and frontend_url not in allow_origins_list:
     allow_origins_list.append(frontend_url)
@@ -149,6 +142,7 @@ if frontend_url and frontend_url not in allow_origins_list:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allow_origins_list,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
