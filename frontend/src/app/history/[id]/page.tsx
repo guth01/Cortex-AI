@@ -8,7 +8,7 @@ import { Calendar, Timer, MessageSquare, FileText, Bot, Check, AlertTriangle, Pa
 import Navbar from '@/components/Navbar';
 import Badge from '@/components/ui/Badge';
 import Spinner from '@/components/ui/Spinner';
-import Button from '@/components/ui/Button';
+
 import apiClient from '@/lib/apiClient';
 import type { Session } from '@/types';
 
@@ -40,29 +40,6 @@ export default function SessionHistoryPage() {
     load();
   }, [id, router]);
 
-  const handleExportPDF = async () => {
-    if (!session || exporting) return;
-    setExporting(true);
-    try {
-      const response = await apiClient.post(
-        `/export/revision-sheet/${session.subject_id}?session_id=${session.id}`,
-        {},
-        { responseType: 'blob' }
-      );
-      const blob = new Blob([response.data], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `revision_sheet.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      console.error('PDF export failed:', e);
-      alert('Could not generate PDF. Make sure a revision sheet is available for this subject.');
-    } finally {
-      setExporting(false);
-    }
-  };
 
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center"><Spinner size="lg" /></div>;
