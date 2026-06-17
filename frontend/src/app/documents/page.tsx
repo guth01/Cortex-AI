@@ -80,7 +80,7 @@ function DocumentsContent() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100">Documents</h1>
-            <p className="text-slate-500 mt-1 text-sm">Upload study materials and start sessions</p>
+            <p className="text-slate-600 dark:text-slate-400 mt-1 text-sm">Upload study materials and start sessions</p>
           </div>
 
           {/* Start session button */}
@@ -128,7 +128,7 @@ function DocumentsContent() {
               className={`px-4 py-2 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
                 activeTab === 'all'
                   ? 'bg-indigo-600/20 text-indigo-400 border border-indigo-500/30'
-                  : 'text-slate-500 hover:text-slate-700 dark:text-slate-700 dark:text-slate-300 hover:bg-[#1e2640] border border-transparent'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-700 dark:text-slate-700 dark:text-slate-300 hover:bg-[#1e2640] border border-transparent'
               }`}
             >
               All Documents
@@ -140,7 +140,7 @@ function DocumentsContent() {
                 className={`px-4 py-2 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
                   activeTab === s.id
                     ? 'bg-indigo-600/20 text-indigo-400 border border-indigo-500/30'
-                    : 'text-slate-500 hover:text-slate-700 dark:text-slate-700 dark:text-slate-300 hover:bg-[#1e2640] border border-transparent'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-700 dark:text-slate-700 dark:text-slate-300 hover:bg-[#1e2640] border border-transparent'
                 }`}
               >
                 {s.name}

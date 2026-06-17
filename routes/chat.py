@@ -176,9 +176,10 @@ async def stream_agent_response(
         yield sse_event({"type": "error", "detail": str(e)}, event="error")
         return
 
-    # ---- Get full final state via ainvoke ----
+    # ---- Read final state from checkpointer (no second agent run!) ----
     try:
-        full_result = await study_agent.ainvoke(initial_state, config=thread_config)
+        snapshot = await study_agent.aget_state(thread_config)
+        full_result = snapshot.values if snapshot else {}
 
         assistant_response = full_result.get("response", "I couldn't generate a response. Please try again.")
         final_intent = full_result.get("intent", "unknown")
@@ -191,7 +192,7 @@ async def stream_agent_response(
         proposed_events = full_result.get("proposed_calendar_events", [])
 
     except Exception as e:
-        print(f"[CHAT] ainvoke error: {e}")
+        print(f"[CHAT] aget_state error: {e}")
         assistant_response = f"I encountered an error: {str(e)}"
         final_intent = "error"
         final_confidence = 0.0
@@ -329,7 +330,7 @@ async def stream_agent_response(
 # ============================================================================
 
 @router.post("/{session_id}")
-@limiter.limit("10/minute")
+@limiter.limit("30/minute")
 async def chat(
     request: Request,
     session_id: str,

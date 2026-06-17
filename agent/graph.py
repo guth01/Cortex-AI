@@ -48,6 +48,9 @@ from agent.nodes import (
     revision_sheet_node,
     direct_calendar_builder_node,
     translation_node,
+    evaluator_node,
+    summary_node,
+    save_node,
     route_by_intent,
     route_after_judge,
     route_after_fallback_choice,
@@ -83,6 +86,11 @@ def build_graph():
     graph.add_node("revision_sheet", revision_sheet_node)
     graph.add_node("translation", translation_node)
 
+    # Day 7 nodes — session end pipeline
+    graph.add_node("evaluator", evaluator_node)
+    graph.add_node("summary_node", summary_node)
+    graph.add_node("save_node", save_node)
+
     # =========================================================================
     # Entry point
     # =========================================================================
@@ -101,6 +109,7 @@ def build_graph():
             "direct_calendar_builder": "direct_calendar_builder",  # calendar_scheduling intent
             "translation": "translation",                 # translation intent
             "synthesis": "synthesis",                     # chitchat + session_end
+            "evaluator": "evaluator",                     # session_end intent
         },
     )
 
@@ -176,7 +185,15 @@ def build_graph():
     graph.add_edge("translation", "synthesis")
 
     # =========================================================================
-    # Terminal edge — all paths end at synthesis
+    # Session end pipeline (Day 7) — evaluator → summary_node → save_node → END
+    # save_node handles Atlas update + ChromaDB cleanup, then returns response
+    # =========================================================================
+    graph.add_edge("evaluator", "summary_node")
+    graph.add_edge("summary_node", "save_node")
+    graph.add_edge("save_node", END)
+
+    # =========================================================================
+    # Terminal edge — all other paths end at synthesis
     # =========================================================================
     graph.add_edge("synthesis", END)
 

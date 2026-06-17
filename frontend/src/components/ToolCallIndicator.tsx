@@ -1,20 +1,21 @@
 'use client';
 import type { SSEProgress } from '@/types';
+import { Brain, BookOpen, Scale, Pause, Search, ScanSearch, LayoutList, CalendarDays, PenLine, Settings } from 'lucide-react';
 
-const nodeMap: Record<string, { label: string; emoji: string; color: string }> = {
-  router: { label: 'Understanding your question...', emoji: '🧠', color: 'text-purple-400' },
-  retrieval: { label: 'Searching your notes...', emoji: '📖', color: 'text-blue-400' },
-  rag: { label: 'Searching your notes...', emoji: '📖', color: 'text-blue-400' },
-  sufficiency_judge: { label: 'Evaluating note coverage...', emoji: '⚖️', color: 'text-amber-400' },
-  await_fallback_node: { label: 'Waiting for your choice...', emoji: '⏸️', color: 'text-slate-600 dark:text-slate-400' },
-  tavily_search: { label: 'Searching the web...', emoji: '🔍', color: 'text-emerald-400' },
-  gap_analysis: { label: 'Analyzing knowledge gaps...', emoji: '🔎', color: 'text-orange-400' },
-  flashcard_node: { label: 'Creating flashcards...', emoji: '🃏', color: 'text-green-400' },
-  flashcard_generator: { label: 'Creating flashcards...', emoji: '🃏', color: 'text-green-400' },
-  study_planning: { label: 'Building study plan...', emoji: '📅', color: 'text-yellow-400' },
-  study_plan_builder: { label: 'Building study plan...', emoji: '📅', color: 'text-yellow-400' },
-  synthesis: { label: 'Composing answer...', emoji: '✍️', color: 'text-indigo-400' },
-  calendar_node: { label: 'Adding to Google Calendar...', emoji: '📆', color: 'text-pink-400' },
+const nodeMap: Record<string, { label: string; Icon: React.ElementType; color: string }> = {
+  router:              { label: 'Understanding your question...', Icon: Brain,        color: 'text-purple-400' },
+  retrieval:           { label: 'Searching your notes...',        Icon: BookOpen,     color: 'text-blue-400' },
+  rag:                 { label: 'Searching your notes...',        Icon: BookOpen,     color: 'text-blue-400' },
+  sufficiency_judge:   { label: 'Evaluating note coverage...',    Icon: Scale,        color: 'text-amber-400' },
+  await_fallback_node: { label: 'Waiting for your choice...',     Icon: Pause,        color: 'text-slate-400' },
+  tavily_search:       { label: 'Searching the web...',           Icon: Search,       color: 'text-emerald-400' },
+  gap_analysis:        { label: 'Analyzing knowledge gaps...',    Icon: ScanSearch,   color: 'text-orange-400' },
+  flashcard_node:      { label: 'Creating flashcards...',         Icon: LayoutList,   color: 'text-green-400' },
+  flashcard_generator: { label: 'Creating flashcards...',         Icon: LayoutList,   color: 'text-green-400' },
+  study_planning:      { label: 'Building study plan...',         Icon: CalendarDays, color: 'text-yellow-400' },
+  study_plan_builder:  { label: 'Building study plan...',         Icon: CalendarDays, color: 'text-yellow-400' },
+  synthesis:           { label: 'Composing answer...',            Icon: PenLine,      color: 'text-indigo-400' },
+  calendar_node:       { label: 'Adding to Google Calendar...',   Icon: CalendarDays, color: 'text-pink-400' },
 };
 
 interface Props {
@@ -28,11 +29,12 @@ export default function ToolCallIndicator({ events, isStreaming }: Props) {
   return (
     <div className="flex flex-col gap-1.5 px-4 py-3">
       {events.map((ev, i) => {
-        const info = nodeMap[ev.node] ?? { label: ev.node, emoji: '⚙️', color: 'text-slate-600 dark:text-slate-400' };
+        const info = nodeMap[ev.node] ?? { label: ev.node, Icon: Settings, color: 'text-slate-400' };
+        const { Icon } = info;
         const isLast = i === events.length - 1;
         return (
           <div key={i} className={`flex items-center gap-2.5 slide-in ${isLast && isStreaming ? 'opacity-100' : 'opacity-60'}`}>
-            <span className="text-sm">{info.emoji}</span>
+            <Icon className={`w-3.5 h-3.5 flex-shrink-0 ${info.color}`} />
             <span className={`text-xs font-medium ${info.color}`}>{info.label}</span>
 
             {/* Extra context */}

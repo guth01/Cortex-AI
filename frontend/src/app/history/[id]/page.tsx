@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { format } from 'date-fns';
+import { Calendar, Timer, MessageSquare, FileText, Bot, Check, AlertTriangle, Paperclip, Scale } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import Badge from '@/components/ui/Badge';
 import Spinner from '@/components/ui/Spinner';
@@ -17,6 +18,7 @@ export default function SessionHistoryPage() {
   const [session, setSession] = useState<Session | null>(null);
   const [subjectName, setSubjectName] = useState('');
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -38,6 +40,30 @@ export default function SessionHistoryPage() {
     load();
   }, [id, router]);
 
+  const handleExportPDF = async () => {
+    if (!session || exporting) return;
+    setExporting(true);
+    try {
+      const response = await apiClient.post(
+        `/export/revision-sheet/${session.subject_id}?session_id=${session.id}`,
+        {},
+        { responseType: 'blob' }
+      );
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `revision_sheet.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('PDF export failed:', e);
+      alert('Could not generate PDF. Make sure a revision sheet is available for this subject.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center"><Spinner size="lg" /></div>;
   }
@@ -51,7 +77,7 @@ export default function SessionHistoryPage() {
         {/* Back */}
         <Link
           href="/history"
-          className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 dark:text-slate-300 mb-6 transition-colors"
+          className="inline-flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-400 hover:text-slate-700 dark:text-slate-300 mb-6 transition-colors"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -69,15 +95,21 @@ export default function SessionHistoryPage() {
                 </Badge>
                 <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">{subjectName || 'Study Session'}</h1>
               </div>
-              <div className="flex items-center gap-4 text-xs text-slate-500">
-                <span>📅 {format(new Date(session.started_at.endsWith('Z') ? session.started_at : session.started_at + 'Z'), 'MMMM d, yyyy · h:mm a')}</span>
+              <div className="flex items-center gap-4 text-xs text-slate-600 dark:text-slate-400">
+                <span className="flex items-center gap-1">
+                  <Calendar className="w-3 h-3" />{format(new Date(session.started_at.endsWith('Z') ? session.started_at : session.started_at + 'Z'), 'MMMM d, yyyy · h:mm a')}
+                </span>
                 {session.ended_at && (
-                  <span>
-                    ⏱ {Math.round((new Date(session.ended_at).getTime() - new Date(session.started_at).getTime()) / 60000)} min
+                  <span className="flex items-center gap-1">
+                    <Timer className="w-3 h-3" />{Math.round((new Date(session.ended_at).getTime() - new Date(session.started_at).getTime()) / 60000)} min
                   </span>
                 )}
-                <span>💬 {session.transcript.length} messages</span>
-                <span>📄 {session.documents_used.length} docs</span>
+                <span className="flex items-center gap-1">
+                  <MessageSquare className="w-3 h-3" />{session.transcript.length} messages
+                </span>
+                <span className="flex items-center gap-1">
+                  <FileText className="w-3 h-3" />{session.documents_used.length} docs
+                </span>
               </div>
             </div>
           </div>
@@ -85,24 +117,69 @@ export default function SessionHistoryPage() {
           {/* Summary */}
           {session.summary && (
             <div className="mt-4 pt-4 border-t border-slate-200 dark:border-[#1f2d4a]">
-              <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Session Summary</p>
+              <p className="text-xs font-medium text-slate-600 dark:text-slate-400 uppercase tracking-wide mb-2">Session Summary</p>
               <p className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed">{session.summary}</p>
             </div>
           )}
 
-          {/* Evaluator scores — Day 7 placeholder */}
-          <div className="mt-4 pt-4 border-t border-slate-200 dark:border-[#1f2d4a]">
-            <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-3">Evaluator Scores</p>
-            <div className="grid grid-cols-3 gap-3">
-              {['Relevance', 'Depth', 'Accuracy'].map((label) => (
-                <div key={label} className="text-center p-3 rounded-xl bg-slate-50 dark:bg-[#0f1623] border border-slate-200 dark:border-[#1f2d4a]">
-                  <p className="text-2xl font-bold text-slate-600">—</p>
-                  <p className="text-xs text-slate-600 mt-0.5">{label}</p>
+          {/* Evaluator Scores */}
+          {session.evaluator_scores && (
+            <div className="mt-4 pt-4 border-t border-slate-200 dark:border-[#1f2d4a]">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-medium text-slate-600 dark:text-slate-400 uppercase tracking-wide">Session Evaluation</p>
+                <span className={`text-sm font-bold px-2 py-0.5 rounded-full ${
+                  (session.evaluator_scores.session_score ?? 0) >= 8 ? 'bg-emerald-500/20 text-emerald-400' :
+                  (session.evaluator_scores.session_score ?? 0) >= 5 ? 'bg-amber-500/20 text-amber-400' :
+                  'bg-red-500/20 text-red-400'
+                }`}>
+                  Score: {session.evaluator_scores.session_score ?? '—'}/10
+                </span>
+              </div>
+
+              {/* Topics covered */}
+              {session.evaluator_scores.topics_covered?.length > 0 && (
+                <div className="mb-3">
+                  <p className="text-xs text-slate-600 dark:text-slate-400 mb-1.5">Topics Covered</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {session.evaluator_scores.topics_covered.map((t: string) => (
+                      <span key={t} className={`text-xs px-2 py-0.5 rounded-full border ${
+                        session.evaluator_scores?.depth?.[t] === 'deep' ? 'bg-indigo-500/15 border-indigo-500/30 text-indigo-400' :
+                        session.evaluator_scores?.depth?.[t] === 'moderate' ? 'bg-amber-500/15 border-amber-500/30 text-amber-400' :
+                        'bg-slate-500/10 border-slate-500/20 text-slate-400'
+                      }`}>
+                        {t} <span className="opacity-60">({session.evaluator_scores?.depth?.[t] ?? 'surface'})</span>
+                      </span>
+                    ))}
+                  </div>
                 </div>
-              ))}
+              )}
+
+              {/* Strong areas */}
+              {session.evaluator_scores.strong_areas?.length > 0 && (
+                <div className="mb-3">
+                  <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">Strong Areas</p>
+                  <p className="text-sm text-emerald-400 flex items-center gap-1">
+                    <Check className="w-3.5 h-3.5" />{session.evaluator_scores.strong_areas.join(', ')}
+                  </p>
+                </div>
+              )}
+
+              {/* Weak moments */}
+              {session.evaluator_scores.weak_moments?.length > 0 && (
+                <div>
+                  <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">Areas for Improvement</p>
+                  <ul className="space-y-1">
+                    {session.evaluator_scores.weak_moments.map((w: string, i: number) => (
+                      <li key={i} className="text-xs text-amber-400 flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3" />{w}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
-            <p className="text-xs text-slate-700 mt-2 text-center">Evaluator scores available after Day 7</p>
-          </div>
+          )}
+
         </div>
 
         {/* Transcript */}
@@ -122,7 +199,7 @@ export default function SessionHistoryPage() {
                   <div className="max-w-[80%]">
                     <div className="flex items-center gap-1.5 mb-1">
                       <span className="text-xs text-slate-600">
-                        {msg.role === 'user' ? 'You' : '🧠 Agent'}
+                        {msg.role === 'user' ? 'You' : <span className="flex items-center gap-1"><Bot className="w-3 h-3" />Agent</span>}
                       </span>
                       {msg.timestamp && (
                         <span className="text-xs text-slate-700">
@@ -155,10 +232,14 @@ export default function SessionHistoryPage() {
                           </span>
                         )}
                         {msg.metadata.answer_source && (
-                          <span className="text-xs text-slate-700">📎 {msg.metadata.answer_source}</span>
+                          <span className="text-xs text-slate-700 flex items-center gap-1">
+                            <Paperclip className="w-3 h-3" />{msg.metadata.answer_source}
+                          </span>
                         )}
                         {msg.metadata.judge_verdict && (
-                          <span className="text-xs text-slate-700">⚖️ {msg.metadata.judge_verdict}</span>
+                          <span className="text-xs text-slate-700 flex items-center gap-1">
+                            <Scale className="w-3 h-3" />{msg.metadata.judge_verdict}
+                          </span>
                         )}
                       </div>
                     )}

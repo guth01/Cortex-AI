@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { formatDistanceToNow } from 'date-fns';
+import { BookOpen, MessageSquare } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import SubjectCard from '@/components/SubjectCard';
 import AddSubjectModal from '@/components/AddSubjectModal';
@@ -39,7 +40,7 @@ export default function DashboardPage() {
 
   const recentSessions = sessions
     .filter((s) => s.status === 'completed')
-    .slice(0, 5);
+    .slice(0, 3);
 
   const activeSession = sessions.find((s) => s.status === 'active');
 
@@ -53,7 +54,7 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100">Dashboard</h1>
-            <p className="text-slate-500 mt-1 text-sm">Manage your subjects and study sessions</p>
+            <p className="text-slate-600 dark:text-slate-400 mt-1 text-sm">Manage your subjects and study sessions</p>
           </div>
           <Button onClick={() => setAddModal(true)}>
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -79,7 +80,7 @@ export default function DashboardPage() {
                 </p>
               </div>
             </div>
-            <button onClick={() => setOauthSuccess(null)} className="text-slate-500 hover:text-slate-700 dark:text-slate-700 dark:text-slate-300">
+            <button onClick={() => setOauthSuccess(null)} className="text-slate-600 dark:text-slate-400 hover:text-slate-700 dark:text-slate-700 dark:text-slate-300">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>
@@ -92,7 +93,7 @@ export default function DashboardPage() {
               <div className="w-2 h-2 rounded-full bg-emerald-400 pulse-dot" />
               <div>
                 <p className="text-sm font-medium text-emerald-400">Active session in progress</p>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-600 dark:text-slate-400">
                   {subjectMap[activeSession.subject_id] ?? 'Unknown subject'} · Started {formatDistanceToNow(new Date(activeSession.started_at.endsWith('Z') ? activeSession.started_at : activeSession.started_at + 'Z'), { addSuffix: true })}
                 </p>
               </div>
@@ -128,7 +129,9 @@ export default function DashboardPage() {
               onClick={() => setAddModal(true)}
               className="border-2 border-dashed border-slate-200 dark:border-[#1f2d4a] rounded-2xl p-12 text-center cursor-pointer hover:border-indigo-500/50 hover:bg-[#111827] transition-all"
             >
-              <div className="text-4xl mb-3">📚</div>
+              <div className="flex items-center justify-center mb-3">
+                <BookOpen className="w-10 h-10 text-slate-600" />
+              </div>
               <p className="text-slate-600 dark:text-slate-400 font-medium">No subjects yet</p>
               <p className="text-slate-600 text-sm mt-1">Click to add your first subject</p>
             </div>
@@ -168,7 +171,7 @@ export default function DashboardPage() {
             <div className="flex items-center justify-center h-32"><Spinner /></div>
           ) : recentSessions.length === 0 ? (
             <div className="text-center py-10 text-slate-600">
-              <div className="text-3xl mb-2">📝</div>
+              <MessageSquare className="w-8 h-8 mx-auto mb-2 text-slate-600" />
               <p className="text-sm">No completed sessions yet.</p>
               <p className="text-xs mt-1">Start a session from any subject card.</p>
             </div>
@@ -192,7 +195,7 @@ export default function DashboardPage() {
                     </span>
                   </div>
                   {session.summary && (
-                    <p className="text-slate-500 text-xs mt-2 line-clamp-2">{session.summary}</p>
+                    <p className="text-slate-600 dark:text-slate-400 text-xs mt-2 line-clamp-2">{session.summary}</p>
                   )}
                   <div className="flex items-center gap-3 mt-2">
                     <span className="text-xs text-slate-600">

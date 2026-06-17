@@ -404,11 +404,15 @@ async def gap_analysis_node(state: AgentState) -> dict:
     subject_name = state.get("subject_name") or "default"
     topics = state.get("topics", [])
 
-    gap_result = knowledge_gap_analysis(
-        session_id=session_id,
-        subject_name=subject_name,
-        custom_topics=topics,
-    )
+    try:
+        gap_result = knowledge_gap_analysis(
+            session_id=session_id,
+            subject_name=subject_name,
+            custom_topics=topics,
+        )
+    except Exception as e:
+        print(f"[NODE:gap_analysis] Error: {e}")
+        gap_result = {"error": str(e), "well_covered": [], "shallow": [], "missing": []}
 
     tool_results = dict(state.get("tool_results") or {})
     tool_results["gap_analysis"] = gap_result
@@ -480,12 +484,22 @@ async def study_plan_builder_node(state: AgentState) -> dict:
 
     # Step 2: Generate study plan
     topics = state.get("topics", [])
-    plan_result = generate_study_plan(
-        session_id=state["session_id"],
-        subject_name=subject_name,
-        exam_date=exam_date,
-        custom_topics=topics,
-    )
+    try:
+        plan_result = generate_study_plan(
+            session_id=state["session_id"],
+            subject_name=subject_name,
+            exam_date=exam_date,
+            custom_topics=topics,
+        )
+    except Exception as e:
+        print(f"[NODE:study_plan_builder] Error generating plan: {e}")
+        tool_results = dict(state.get("tool_results") or {})
+        tool_results["study_plan"] = {"error": str(e)}
+        return {
+            "proposed_calendar_events": [],
+            "awaiting_confirmation": False,
+            "tool_results": tool_results,
+        }
 
     proposed_events = plan_result.get("proposed_events", [])
 
@@ -538,14 +552,19 @@ async def calendar_node(state: AgentState) -> dict:
     failed_events = []
 
     for event in proposed_events:
-        result = await create_study_session_event(
-            user_id=user_id,
-            subject=event.get("subject", "Study"),
-            date=event.get("date"),
-            duration_minutes=event.get("duration_minutes", 60),
-            db=db,
-            start_time=event.get("start_time"),
-        )
+        try:
+            result = await create_study_session_event(
+                user_id=user_id,
+                subject=event.get("subject", "Study"),
+                date=event.get("date"),
+                duration_minutes=event.get("duration_minutes", 60),
+                db=db,
+                start_time=event.get("start_time"),
+                topic=event.get("topic"),
+            )
+        except Exception as e:
+            print(f"[NODE:calendar] Exception creating event on {event.get('date')}: {e}")
+            result = {"error": str(e)}
 
         if "error" in result:
             print(f"[NODE:calendar] Failed to create event on {event['date']}: {result['error']}")
@@ -697,15 +716,19 @@ async def flashcard_generator_node(state: AgentState) -> dict:
     print(f"[NODE:flashcard_generator] topic='{topic}', num_cards={num_cards}")
 
     # Step 2: Create flashcards
-    flashcard_result = await create_flashcards(
-        topic=topic,
-        num_cards=num_cards,
-        session_id=state["session_id"],
-        subject_id=state["subject_id"],
-        user_id=state["user_id"],
-        db=db,
-        llm=llm,
-    )
+    try:
+        flashcard_result = await create_flashcards(
+            topic=topic,
+            num_cards=num_cards,
+            session_id=state["session_id"],
+            subject_id=state["subject_id"],
+            user_id=state["user_id"],
+            db=db,
+            llm=llm,
+        )
+    except Exception as e:
+        print(f"[NODE:flashcard_generator] Error: {e}")
+        flashcard_result = {"error": str(e), "cards_created": 0}
 
     tool_results = dict(state.get("tool_results") or {})
     tool_results["flashcards"] = flashcard_result
@@ -739,13 +762,17 @@ async def revision_sheet_node(state: AgentState) -> dict:
     topics = state.get("topics", [])
 
     # Step 2: Generate sheet (loops over topics + gap analysis)
-    result = await generate_exam_revision_sheet(
-        subject_id=state["subject_id"],
-        session_id=state["session_id"],
-        subject_name=subject_name,
-        llm=llm,
-        custom_topics=topics,
-    )
+    try:
+        result = await generate_exam_revision_sheet(
+            subject_id=state["subject_id"],
+            session_id=state["session_id"],
+            subject_name=subject_name,
+            llm=llm,
+            custom_topics=topics,
+        )
+    except Exception as e:
+        print(f"[NODE:revision_sheet] Error: {e}")
+        result = {"error": str(e)}
 
     tool_results = dict(state.get("tool_results") or {})
     tool_results["revision_sheet"] = result
@@ -800,7 +827,11 @@ async def translation_node(state: AgentState) -> dict:
     print(f"[NODE:translation] target_language='{target_language}'")
 
     # Step 2: Translate
-    translation_result = translate_content(text=text_to_translate, target_language=target_language)
+    try:
+        translation_result = translate_content(text=text_to_translate, target_language=target_language)
+    except Exception as e:
+        print(f"[NODE:translation] Error: {e}")
+        translation_result = {"error": str(e)}
 
     tool_results = dict(state.get("tool_results") or {})
     tool_results["translation"] = translation_result
@@ -1195,7 +1226,7 @@ Answer the question using the context above."""
 # Edge routing functions (used by LangGraph conditional edges)
 # ============================================================================
 
-def route_by_intent(state: AgentState) -> Literal["rag", "planner", "gap_analysis", "direct_calendar_builder", "synthesis", "translation"]:
+def route_by_intent(state: AgentState) -> Literal["rag", "planner", "gap_analysis", "direct_calendar_builder", "synthesis", "translation", "evaluator"]:
     """
     Map intent → next node after router.
     """
@@ -1204,7 +1235,7 @@ def route_by_intent(state: AgentState) -> Literal["rag", "planner", "gap_analysi
         "content_generation": "planner",
         "study_planning": "gap_analysis",
         "calendar_scheduling": "direct_calendar_builder",
-        "session_end": "synthesis",
+        "session_end": "evaluator",
         "chitchat": "synthesis",
         "translation": "translation",
     }
@@ -1285,3 +1316,194 @@ async def route_by_calendar_auth(state: AgentState) -> Literal["has_auth", "no_a
 
     print(f"[EDGE:calendar_auth] user {user_id} → no_auth")
     return "no_auth"
+
+
+# ============================================================================
+# EvaluatorNode — assesses the quality of the completed session (Day 7)
+# ============================================================================
+
+EVALUATOR_SYSTEM_PROMPT = """You are an expert educational evaluator. Analyze the provided study session transcript and return a structured JSON assessment.
+
+Evaluate:
+1. topics_covered: list of distinct topics/concepts discussed
+2. depth: for each topic, assign one of "surface" | "moderate" | "deep" based on how thoroughly it was explored
+3. weak_moments: list of moments where the student showed confusion, incorrect understanding, or needed significant clarification (brief descriptions)
+4. session_score: an integer 1-10 rating of the session quality (10=excellent engagement and understanding)
+5. strong_areas: topics the student clearly understood well
+
+Return ONLY valid JSON in this exact format:
+{
+  "topics_covered": ["topic1", "topic2"],
+  "depth": {"topic1": "deep", "topic2": "surface"},
+  "weak_moments": ["student confused X with Y", "struggled to explain Z"],
+  "strong_areas": ["topic1"],
+  "session_score": 7
+}
+
+If the transcript has no real study content (e.g., just greetings), return a score of 1 and empty lists."""
+
+
+async def evaluator_node(state: AgentState) -> dict:
+    """
+    EvaluatorNode: Assess session quality by reading the full transcript.
+    Fires when intent == session_end.
+    Stores structured evaluation in state["evaluation"].
+    """
+    import json as _json
+    print("[NODE:evaluator] Running session evaluation...")
+
+    llm = _get_judge_llm(temperature=0.1)
+
+    transcript = state.get("transcript", []) or state.get("messages", [])
+
+    if not transcript:
+        print("[NODE:evaluator] No transcript — skipping evaluation")
+        return {
+            "evaluation": {
+                "topics_covered": [],
+                "depth": {},
+                "weak_moments": [],
+                "strong_areas": [],
+                "session_score": 1,
+            }
+        }
+
+    # Format transcript as readable text
+    transcript_text = "\n".join([
+        f"{msg.get('role', 'unknown').upper()}: {msg.get('content', '')[:500]}"
+        for msg in transcript
+        if msg.get("content") and msg.get("role") in ("user", "assistant")
+    ])
+
+    response = await llm.ainvoke([
+        SystemMessage(content=EVALUATOR_SYSTEM_PROMPT),
+        HumanMessage(content=f"Session transcript:\n\n{transcript_text}"),
+    ])
+
+    raw = response.content.strip()
+    # Strip markdown fences if present
+    clean = re.sub(r"```(?:json)?\n?", "", raw).strip().rstrip("`")
+
+    try:
+        evaluation = _json.loads(clean)
+    except Exception:
+        print(f"[NODE:evaluator] JSON parse failed, using fallback")
+        evaluation = {
+            "topics_covered": [],
+            "depth": {},
+            "weak_moments": [],
+            "strong_areas": [],
+            "session_score": 5,
+        }
+
+    score = evaluation.get("session_score", 5)
+    topics = evaluation.get("topics_covered", [])
+    print(f"[NODE:evaluator] score={score}, topics={topics}")
+    return {"evaluation": evaluation}
+
+
+# ============================================================================
+# SummaryNode — generates a human-readable session recap (Day 7)
+# ============================================================================
+
+SUMMARY_SYSTEM_PROMPT = """You are a study coach writing a post-session summary for a student.
+
+Based on the evaluation data provided, write a concise, encouraging session summary.
+
+Include:
+- A brief overview of what was covered
+- 1-2 sentences on strong areas
+- 1-2 sentences on areas needing more work
+- A specific suggestion for next session
+
+Keep it to 3-4 short paragraphs. Tone: warm, constructive, and motivating. Do NOT use bullet points or headers."""
+
+
+async def summary_node(state: AgentState) -> dict:
+    """
+    SummaryNode: Takes evaluator output and writes a human-readable summary.
+    Stores result in state["session_summary"].
+    """
+    print("[NODE:summary] Generating session summary...")
+
+    llm = _get_judge_llm(temperature=0.5)
+
+    evaluation = state.get("evaluation") or {}
+    topics = evaluation.get("topics_covered", [])
+    depth = evaluation.get("depth", {})
+    weak_moments = evaluation.get("weak_moments", [])
+    strong_areas = evaluation.get("strong_areas", [])
+    score = evaluation.get("session_score", 5)
+
+    eval_summary = f"""Session score: {score}/10
+Topics covered: {', '.join(topics) or 'General study'}
+Strong areas: {', '.join(strong_areas) or 'None identified'}
+Areas needing work: {', '.join(weak_moments) or 'None identified'}
+Depth breakdown: {', '.join([f"{t}: {d}" for t, d in depth.items()]) or 'N/A'}"""
+
+    response = await llm.ainvoke([
+        SystemMessage(content=SUMMARY_SYSTEM_PROMPT),
+        HumanMessage(content=eval_summary),
+    ])
+
+    summary = response.content.strip() if hasattr(response, "content") else str(response)
+    print(f"[NODE:summary] Summary generated ({len(summary)} chars)")
+    return {"session_summary": summary}
+
+
+# ============================================================================
+# SaveNode — persists evaluation + summary to Atlas and cleans up Chroma (Day 7)
+# ============================================================================
+
+async def save_node(state: AgentState) -> dict:
+    """
+    SaveNode: Writes the session evaluation and summary to Atlas.
+    Then deletes the ChromaDB collection.
+    This is the final node in the session_end pipeline.
+    """
+    import asyncio as _asyncio
+    from bson import ObjectId
+    from datetime import datetime
+    from db.chroma import delete_session_collection
+    from routes.deps import get_db
+
+    print("[NODE:save] Persisting session evaluation and summary...")
+
+    session_id = state["session_id"]
+    evaluation = state.get("evaluation") or {}
+    session_summary = state.get("session_summary") or ""
+
+    try:
+        db = get_db()
+        session_oid = ObjectId(session_id)
+        ended_at = datetime.utcnow()
+
+        await db.sessions.update_one(
+            {"_id": session_oid},
+            {
+                "$set": {
+                    "status": "completed",
+                    "ended_at": ended_at,
+                    "summary": session_summary,
+                    "evaluator_scores": {
+                        "topics_covered": evaluation.get("topics_covered", []),
+                        "depth": evaluation.get("depth", {}),
+                        "weak_moments": evaluation.get("weak_moments", []),
+                        "strong_areas": evaluation.get("strong_areas", []),
+                        "session_score": evaluation.get("session_score", 0),
+                    },
+                }
+            },
+        )
+        print(f"[NODE:save] Session {session_id} marked completed in Atlas")
+    except Exception as e:
+        print(f"[NODE:save] Atlas update error: {e}")
+
+    # Delete ChromaDB collection
+    try:
+        await _asyncio.to_thread(delete_session_collection, session_id)
+        print(f"[NODE:save] ChromaDB collection deleted for session {session_id}")
+    except Exception as e:
+        print(f"[NODE:save] ChromaDB deletion error (non-fatal): {e}")
+
+    return {"response": state.get("session_summary") or "Session completed successfully."}

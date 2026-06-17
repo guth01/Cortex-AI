@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
+import { UploadCloud, InboxIcon, CheckCircle2, AlertTriangle } from 'lucide-react';
 import Spinner from '@/components/ui/Spinner';
 
 interface Props {
@@ -26,7 +27,7 @@ export default function DropzoneUpload({ subjectId, onUpload }: Props) {
         prog.push(`Uploading ${file.name}...`);
         setProgress([...prog]);
         await onUpload(file, subjectId);
-        prog[prog.length - 1] = `✓ ${file.name}`;
+        prog[prog.length - 1] = `done:${file.name}`;
         setProgress([...prog]);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : 'Upload failed';
@@ -66,17 +67,17 @@ export default function DropzoneUpload({ subjectId, onUpload }: Props) {
           </div>
         ) : isDragActive ? (
           <div className="flex flex-col items-center gap-3">
-            <div className="text-4xl">📥</div>
+            <InboxIcon className="w-10 h-10 text-indigo-400" />
             <p className="text-indigo-400 font-medium">Drop files here</p>
           </div>
         ) : (
           <div className="flex flex-col items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-xl">
-              📤
+            <div className="w-12 h-12 rounded-xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center">
+              <UploadCloud className="w-6 h-6 text-indigo-400" />
             </div>
             <div>
               <p className="text-slate-700 dark:text-slate-700 dark:text-slate-300 font-medium">Drag & drop files here</p>
-              <p className="text-slate-500 text-sm mt-1">or click to browse</p>
+              <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">or click to browse</p>
             </div>
             <p className="text-xs text-slate-600">PDF, DOCX, MD, TXT · up to 20MB each</p>
           </div>
@@ -88,12 +89,12 @@ export default function DropzoneUpload({ subjectId, onUpload }: Props) {
         <div className="space-y-1">
           {progress.map((msg, i) => (
             <div key={i} className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-              {msg.startsWith('✓') ? (
-                <span className="text-emerald-400">✓</span>
+              {msg.startsWith('done:') ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
               ) : (
                 <Spinner size="sm" />
               )}
-              <span>{msg.replace('✓ ', '')}</span>
+              <span>{msg.replace('done:', '')}</span>
             </div>
           ))}
         </div>
@@ -103,8 +104,9 @@ export default function DropzoneUpload({ subjectId, onUpload }: Props) {
       {errors.length > 0 && (
         <div key={errors.length} className="space-y-1 animate-shake">
           {errors.map((err, i) => (
-            <p key={i} className="text-sm text-red-400 bg-red-500/10 px-3 py-1.5 rounded-lg border border-red-500/20">
-              ⚠ {err}
+            <p key={i} className="text-sm text-red-400 bg-red-500/10 px-3 py-1.5 rounded-lg border border-red-500/20 flex items-center gap-2">
+              <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+              {err}
             </p>
           ))}
         </div>

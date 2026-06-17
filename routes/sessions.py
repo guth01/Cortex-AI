@@ -164,8 +164,9 @@ async def end_session(
     """
     End an active study session.
 
-    - Marks session as completed
-    - Deletes ChromaDB collection (no trace left)
+    - Invokes the LangGraph session_end pipeline:
+        router → evaluator → summary_node → save_node
+    - save_node marks session completed, saves evaluation + summary, deletes Chroma collection.
 
     Protected route — requires authentication.
     """
@@ -194,28 +195,68 @@ async def end_session(
             detail=f"Session is already {session['status']}",
         )
 
-    # Update session in MongoDB
-    ended_at = datetime.utcnow()
-    await db.sessions.update_one(
-        {"_id": session_oid},
-        {
-            "$set": {
-                "status": "completed",
-                "ended_at": ended_at,
-                "summary": None,
-            }
-        },
-    )
+    # ---- Invoke the session_end graph pipeline ----
+    from agent.graph import study_agent
+    from agent.state import AgentState
 
-    # Delete ChromaDB collection
-    await asyncio.to_thread(delete_session_collection, session_id)
+    transcript = session.get("transcript", [])
+
+    initial_state: AgentState = {
+        "messages": transcript + [{"role": "user", "content": "I'm done for today. Please end the session."}],
+        "session_id": session_id,
+        "user_id": current_user["id"],
+        "subject_id": session.get("subject_id", ""),
+        "intent": "session_end",
+        "retrieved_chunks": [],
+        "chunk_confidence": 0.0,
+        "judge_verdict": None,
+        "judge_reason": None,
+        "fallback_strategy": None,
+        "web_results": [],
+        "answer_source": None,
+        "tool_results": {},
+        "plan": [],
+        "response": "",
+        "awaiting_confirmation": False,
+        "proposed_calendar_events": [],
+        "exam_date": None,
+        "subject_name": None,
+        "topics": session.get("topics", []),
+        # Session end specific
+        "transcript": transcript,
+        "evaluation": None,
+        "session_summary": None,
+    }
+
+    thread_config = {"configurable": {"thread_id": f"end-{session_id}"}}
+
+    try:
+        final_state = await study_agent.ainvoke(initial_state, config=thread_config)
+        summary = final_state.get("session_summary") or "Session completed."
+        evaluation = final_state.get("evaluation") or {}
+        ended_at = datetime.utcnow()
+    except Exception as e:
+        print(f"[END_SESSION] Graph error: {e} — falling back to simple close")
+        # Fallback: close session manually without evaluation
+        ended_at = datetime.utcnow()
+        summary = None
+        evaluation = {}
+        await db.sessions.update_one(
+            {"_id": session_oid},
+            {"$set": {"status": "completed", "ended_at": ended_at, "summary": summary}},
+        )
+        await asyncio.to_thread(delete_session_collection, session_id)
+
+    # Re-read the session to get the updated ended_at written by save_node
+    updated_session = await db.sessions.find_one({"_id": session_oid})
+    ended_at = updated_session.get("ended_at", ended_at) if updated_session else ended_at
 
     return SessionEndResponse(
         session_id=session_id,
         status="completed",
         started_at=session["started_at"],
         ended_at=ended_at,
-        summary=None,
+        summary=summary,
     )
 
 

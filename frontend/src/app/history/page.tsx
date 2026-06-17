@@ -1,6 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { formatDistanceToNow, format } from 'date-fns';
+import { Clock, MessageSquare, FileText, History } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import Badge from '@/components/ui/Badge';
 import Spinner from '@/components/ui/Spinner';
@@ -24,14 +25,14 @@ export default function HistoryPage() {
       <main className="pt-24 pb-12 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100">Session History</h1>
-          <p className="text-slate-500 mt-1 text-sm">All your past study sessions</p>
+          <p className="text-slate-600 dark:text-slate-400 mt-1 text-sm">All your past study sessions</p>
         </div>
 
         {loading ? (
           <div className="flex justify-center py-16"><Spinner size="lg" /></div>
         ) : sessions.length === 0 ? (
           <div className="text-center py-16">
-            <div className="text-5xl mb-4">📜</div>
+            <History className="w-12 h-12 mx-auto mb-4 text-slate-600" />
             <p className="text-slate-600 dark:text-slate-400 font-medium">No sessions yet</p>
             <p className="text-slate-600 text-sm mt-2">
               Start your first session from the dashboard.
@@ -57,18 +58,18 @@ export default function HistoryPage() {
                     </div>
 
                     {session.summary && (
-                      <p className="text-slate-500 text-sm mt-1 line-clamp-2">{session.summary}</p>
+                      <p className="text-slate-600 dark:text-slate-400 text-sm mt-1 line-clamp-2">{session.summary}</p>
                     )}
 
                     <div className="flex items-center gap-4 mt-2">
-                      <span className="text-xs text-slate-600">
-                        📅 {format(new Date(session.started_at), 'MMM d, yyyy · h:mm a')}
+                      <span className="flex items-center gap-1 text-xs text-slate-600">
+                        <Clock className="w-3 h-3" />{format(new Date(session.started_at), 'MMM d, yyyy · h:mm a')}
                       </span>
-                      <span className="text-xs text-slate-600">
-                        💬 {session.transcript.length} messages
+                      <span className="flex items-center gap-1 text-xs text-slate-600">
+                        <MessageSquare className="w-3 h-3" />{session.transcript.length} messages
                       </span>
-                      <span className="text-xs text-slate-600">
-                        📄 {session.documents_used.length} docs
+                      <span className="flex items-center gap-1 text-xs text-slate-600">
+                        <FileText className="w-3 h-3" />{session.documents_used.length} docs
                       </span>
                     </div>
                   </div>

@@ -261,6 +261,7 @@ async def create_study_session_event(
     db,                     # AsyncIOMotorDatabase
     start_hour: int = 9,    # Default start time: 9 AM
     start_time: str = None, # "HH:MM" 24-hour format
+    topic: str = None,      # Optional topic label for event title
 ) -> dict:
     """
     Create a Google Calendar event for a study session.
@@ -592,6 +593,7 @@ Each object in the array must have exactly these fields:
   - "card_type": one of "definition", "concept", "application", "fact"
 
 Generate the flashcards in the same language as the provided topic and context.
+Ensure all generated questions are strictly unique and diverse. Do NOT repeat the same or similar questions.
 
 Example format:
 [{"question": "What is...", "answer": "It is...", "card_type": "definition"}]"""

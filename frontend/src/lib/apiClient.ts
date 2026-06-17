@@ -19,11 +19,12 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
-// ─── Response interceptor: redirect on 401 ───────────────────────────────────
+// ─── Response interceptor: redirect on 401/403 ───────────────────────────────
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const status = error.response?.status;
+    if (status === 401 || status === 403) {
       Cookies.remove(TOKEN_KEY);
       if (typeof window !== 'undefined') {
         const currentPath = window.location.pathname;

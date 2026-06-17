@@ -1,4 +1,5 @@
 'use client';
+import { FileText, File, FileCode, Folder } from 'lucide-react';
 import type { Document } from '@/types';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
@@ -7,8 +8,8 @@ const typeColors: Record<string, 'red' | 'blue' | 'green' | 'yellow'> = {
   pdf: 'red', docx: 'blue', md: 'green', txt: 'yellow',
 };
 
-const typeIcons: Record<string, string> = {
-  pdf: '📕', docx: '📘', md: '📗', txt: '📄',
+const typeIconMap: Record<string, React.ElementType> = {
+  pdf: FileText, docx: File, md: FileCode, txt: FileText,
 };
 
 interface Props {
@@ -28,8 +29,8 @@ function formatBytes(b: number) {
 export default function DocumentList({ documents, selectedIds, onToggle, onDelete, showCheckboxes }: Props) {
   if (documents.length === 0) {
     return (
-      <div className="text-center py-12 text-slate-500">
-        <div className="text-3xl mb-3">📂</div>
+      <div className="text-center py-12 text-slate-600 dark:text-slate-400">
+        <Folder className="w-10 h-10 mx-auto mb-3 text-slate-600" />
         <p className="text-sm">No documents yet. Upload some files above.</p>
       </div>
     );
@@ -63,9 +64,9 @@ export default function DocumentList({ documents, selectedIds, onToggle, onDelet
             )}
 
             {/* Icon */}
-            <span className="text-xl flex-shrink-0">
-              {typeIcons[doc.source_type] ?? '📄'}
-            </span>
+            <div className="w-9 h-9 rounded-lg bg-slate-700/40 flex items-center justify-center flex-shrink-0">
+              {(() => { const Icon = typeIconMap[doc.source_type] ?? File; return <Icon className="w-4 h-4 text-slate-400" />; })()}
+            </div>
 
             {/* Info */}
             <div className="flex-1 min-w-0">

@@ -2,15 +2,16 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { LayoutDashboard, FileText, Layers, History } from 'lucide-react';
 import apiClient, { removeToken } from '@/lib/apiClient';
 import type { User } from '@/types';
 import ThemeToggle from '@/components/ThemeToggle';
 
 const navItems = [
-  { href: '/dashboard', label: 'Dashboard', icon: '🏠' },
-  { href: '/documents', label: 'Documents', icon: '📄' },
-  { href: '/flashcards', label: 'Flashcards', icon: '🃏' },
-  { href: '/history', label: 'History', icon: '📜' },
+  { href: '/dashboard', label: 'Dashboard', Icon: LayoutDashboard },
+  { href: '/documents', label: 'Documents', Icon: FileText },
+  { href: '/flashcards', label: 'Flashcards', Icon: Layers },
+  { href: '/history', label: 'History', Icon: History },
 ];
 
 export default function Navbar() {
@@ -57,13 +58,15 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link href="/dashboard" className="flex items-center gap-3 group">
-            <img src="/image.png" alt="CortexAI Logo" className="h-10 object-contain" />
+          <Link href="/dashboard" className="flex items-center group">
+            <span className="font-black text-2xl tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500 dark:from-indigo-400 dark:via-purple-400 dark:to-indigo-400 drop-shadow-sm">
+              Cortex AI
+            </span>
           </Link>
 
           {/* Nav links */}
           <div className="flex items-center gap-1">
-            {navItems.map(({ href, label, icon }) => {
+            {navItems.map(({ href, label, Icon }) => {
               const active = pathname.startsWith(href);
               return (
                 <Link
@@ -77,7 +80,7 @@ export default function Navbar() {
                     }
                   `}
                 >
-                  <span>{icon}</span>
+                  <Icon className="w-4 h-4" />
                   <span className="hidden sm:block">{label}</span>
                 </Link>
               );
@@ -89,12 +92,17 @@ export default function Navbar() {
             <ThemeToggle />
 
             {user?.google_oauth_connected ? (
-              <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20">
+              <button
+                onClick={handleConnectCalendar}
+                disabled={isConnecting}
+                title="Click to reconnect or refresh calendar permissions"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 transition-all disabled:opacity-50"
+              >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
-                <span className="hidden sm:block">Calendar Connected</span>
-              </div>
+                <span className="hidden sm:block">{isConnecting ? 'Connecting...' : 'Calendar Connected'}</span>
+              </button>
             ) : (
               <button
                 onClick={handleConnectCalendar}

@@ -97,6 +97,7 @@ class SessionResponse(BaseModel):
     ended_at: Optional[datetime] = None
     summary: Optional[str] = None
     transcript: List[dict] = []
+    evaluator_scores: Optional[dict] = None
 
 
 class SessionEndResponse(BaseModel):
@@ -105,6 +106,7 @@ class SessionEndResponse(BaseModel):
     started_at: datetime
     ended_at: datetime
     summary: Optional[str] = None
+    evaluator_scores: Optional[dict] = None
 
 
 # ============= FLASHCARD MODELS =============

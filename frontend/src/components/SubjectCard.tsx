@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { differenceInDays, parseISO } from 'date-fns';
+import { AlertTriangle, Calendar } from 'lucide-react';
 import type { Subject } from '@/types';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
@@ -42,7 +43,7 @@ export default function SubjectCard({ subject, onDelete, onStartSession }: Props
           <div className="flex-1 min-w-0">
             <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-lg truncate">{subject.name}</h3>
             {daysUntilExam !== null && (
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
                 Exam: {new Date(subject.exam_date!).toLocaleDateString()}
               </p>
             )}
@@ -60,7 +61,7 @@ export default function SubjectCard({ subject, onDelete, onStartSession }: Props
                   setIsDeleting(false);
                 }
               }}
-              className={`opacity-0 group-hover:opacity-100 ml-2 p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all ${isDeleting ? 'opacity-100 cursor-wait' : ''}`}
+              className={`opacity-0 group-hover:opacity-100 ml-2 p-1.5 text-slate-600 dark:text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all ${isDeleting ? 'opacity-100 cursor-wait' : ''}`}
               title="Delete subject"
             >
               {isDeleting ? (
@@ -81,12 +82,14 @@ export default function SubjectCard({ subject, onDelete, onStartSession }: Props
         <div className="flex items-center gap-2">
           {daysUntilExam !== null ? (
             <Badge color={examBadgeColor}>
-              {daysUntilExam < 0
-                ? `${Math.abs(daysUntilExam)}d overdue`
-                : daysUntilExam === 0
-                ? '🚨 Exam today!'
-                : `📅 ${daysUntilExam}d to exam`
-              }
+              <span className="flex items-center gap-1">
+                {daysUntilExam < 0
+                  ? `${Math.abs(daysUntilExam)}d overdue`
+                  : daysUntilExam === 0
+                  ? <><AlertTriangle className="w-3 h-3" /> Exam today!</>
+                  : <><Calendar className="w-3 h-3" /> {daysUntilExam}d to exam</>
+                }
+              </span>
             </Badge>
           ) : (
             <Badge color="slate">No exam date</Badge>

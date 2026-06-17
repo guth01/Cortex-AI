@@ -20,6 +20,13 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 UPLOAD_DIR = Path("./uploads")
 MAX_FILE_SIZE = 20 * 1024 * 1024  # 20MB
 ALLOWED_EXTENSIONS = {"pdf", "docx", "md", "txt"}
+ALLOWED_CONTENT_TYPES = {
+    "application/pdf",
+    "text/plain",
+    "text/markdown",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/octet-stream",  # some browsers send this for .md / .docx
+}
 
 
 @router.post("/upload", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
@@ -64,8 +71,16 @@ async def upload_document(
     file_ext = file.filename.split(".")[-1].lower() if "." in file.filename else ""
     if file_ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"File type not allowed. Allowed types: {', '.join(ALLOWED_EXTENSIONS)}",
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"File type not supported. Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
+        )
+
+    # Validate MIME type (browsers send this — guards against renamed files)
+    content_type = file.content_type or ""
+    if content_type and content_type not in ALLOWED_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"File MIME type '{content_type}' is not supported.",
         )
 
     # Read file content and validate size

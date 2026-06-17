@@ -19,6 +19,7 @@ from routes.sessions import router as sessions_router
 from routes.chat import router as chat_router
 from routes.google_oauth import router as google_oauth_router
 from routes.flashcards import router as flashcards_router
+from routes.export import router as export_router
 
 # Load environment variables
 load_dotenv()
@@ -156,6 +157,7 @@ app.include_router(documents_router)
 app.include_router(sessions_router)
 app.include_router(flashcards_router)     # Day 6: Flashcard list + SM-2 review
 app.include_router(chat_router)
+app.include_router(export_router)         # Day 7: PDF export
 
 
 @app.get("/")

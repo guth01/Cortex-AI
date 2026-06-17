@@ -1,10 +1,11 @@
 'use client';
-import ReactMarkdown from 'react-markdown';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { BookOpen, AlertTriangle, XCircle } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import ToolCallIndicator from '@/components/ToolCallIndicator';
 import StudyPlanConfirm from '@/components/StudyPlanConfirm';
+import StreamingMessage from '@/components/StreamingMessage';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import Spinner from '@/components/ui/Spinner';
@@ -54,6 +55,9 @@ export default function SessionPage() {
   const [choosingFallback, setChoosingFallback] = useState(false);
 
   const [ending, setEnding] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  // ID of the assistant message that contained a revision sheet — shown a download button
+  const [revisionSheetMsgId, setRevisionSheetMsgId] = useState<string | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -122,6 +126,13 @@ export default function SessionPage() {
         if (event === 'progress') {
           const progress = data as SSEProgress;
           setProgressEvents((prev) => [...prev, progress]);
+          // If revision sheet was generated, mark this message for the download button
+          if (
+            progress.node === 'revision_sheet' ||
+            (progress.node === 'synthesis' && (data as Record<string, unknown>).revision_sheet)
+          ) {
+            setRevisionSheetMsgId(asstMsgId);
+          }
 
         } else if (event === 'fallback_choice_pending') {
           // Judge returned PARTIAL or INSUFFICIENT — graph is paused.
@@ -149,15 +160,16 @@ export default function SessionPage() {
 
         } else if (event === 'response') {
           const response = data as SSEResponse;
-          fullContent = response.content ?? '';
           gotResponse = true;
+          // Use already-streamed content if we got tokens, otherwise fall back to full response
+          const finalContent = fullContent || response.content || '';
           setMessages((prev) =>
-            prev.map((m) => (m.id === asstMsgId ? { ...m, content: fullContent, streaming: false } : m))
+            prev.map((m) => (m.id === asstMsgId ? { ...m, content: finalContent, streaming: false } : m))
           );
 
         } else if (event === 'error') {
           const err = data as Record<string, unknown>;
-          fullContent = `⚠ Error: ${err.detail}`;
+          fullContent = `Error: ${err.detail}`;
           gotResponse = true;
           setMessages((prev) =>
             prev.map((m) => (m.id === asstMsgId ? { ...m, content: fullContent, streaming: false } : m))
@@ -168,7 +180,7 @@ export default function SessionPage() {
       if ((e as Error).name !== 'AbortError') {
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === asstMsgId ? { ...m, content: '⚠ Connection error. Try again.', streaming: false } : m
+            m.id === asstMsgId ? { ...m, content: 'Connection error. Try again.', streaming: false } : m
           )
         );
       }
@@ -207,13 +219,13 @@ export default function SessionPage() {
           );
         } else if (event === 'response') {
           const d = data as SSEResponse;
-          fullContent = d.content ?? '';
+          const finalContent = fullContent || d.content || '';
           setMessages((prev) =>
-            prev.map((m) => (m.id === asstMsgId ? { ...m, content: fullContent, streaming: false } : m))
+            prev.map((m) => (m.id === asstMsgId ? { ...m, content: finalContent, streaming: false } : m))
           );
         } else if (event === 'error') {
           const err = data as Record<string, unknown>;
-          fullContent = `⚠ Error: ${err.detail}`;
+          fullContent = `Error: ${err.detail}`;
           setMessages((prev) =>
             prev.map((m) => (m.id === asstMsgId ? { ...m, content: fullContent, streaming: false } : m))
           );
@@ -223,7 +235,7 @@ export default function SessionPage() {
       setMessages((prev) =>
         prev.map((m) =>
           m.id === asstMsgId
-            ? { ...m, content: e instanceof Error ? `⚠ ${e.message}` : '⚠ Could not get a response. Try again.', streaming: false }
+            ? { ...m, content: e instanceof Error ? e.message : 'Could not get a response. Try again.', streaming: false }
             : m
         )
       );
@@ -246,14 +258,14 @@ export default function SessionPage() {
       await streamConfirmPlan(sessionId, 'confirm', (event, data) => {
         const d = data as Record<string, unknown>;
         if (event === 'response') {
-          const content = (d.content as string) ?? 'Calendar events created! ✅';
+      const content = (d.content as string) ?? 'Calendar events created!';
           setMessages((prev) => [...prev, { id: `cal-${Date.now()}`, role: 'assistant', content }]);
         }
       });
       setPendingPlan(null);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Could not create calendar events.';
-      setMessages((prev) => [...prev, { id: `cal-err-${Date.now()}`, role: 'system', content: `⚠ ${msg}` }]);
+      setMessages((prev) => [...prev, { id: `cal-err-${Date.now()}`, role: 'system', content: `Error: ${msg}` }]);
     } finally {
       setConfirmingPlan(false);
     }
@@ -275,6 +287,30 @@ export default function SessionPage() {
       router.push(`/history/${sessionId}`);
     } catch {
       setEnding(false);
+    }
+  };
+
+  const handleExportPDF = async (documentText?: string) => {
+    if (!session || exporting) return;
+    setExporting(true);
+    try {
+      const response = await apiClient.post(
+        `/export/revision-sheet/${session.subject_id}?session_id=${sessionId}`,
+        { document_text: documentText },
+        { responseType: 'blob' }
+      );
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `revision_sheet.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('PDF export failed:', e);
+      alert('Could not generate PDF. Try generating a revision sheet first by asking the agent.');
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -301,20 +337,22 @@ export default function SessionPage() {
                 </Badge>
               </div>
               {session && (
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
                   {session.documents_used.length} document{session.documents_used.length !== 1 ? 's' : ''} loaded
                 </p>
               )}
             </div>
           </div>
 
-          <Button variant="danger" size="sm" loading={ending} onClick={handleEndSession}>
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
-            </svg>
-            End Chat
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="danger" size="sm" loading={ending} onClick={handleEndSession}>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+              </svg>
+              End Chat
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -324,9 +362,11 @@ export default function SessionPage() {
           {/* Welcome message */}
           {messages.length === 0 && !isStreaming && (
             <div className="text-center py-16 fade-in">
-              <div className="text-5xl mb-4">🧠</div>
+              <div className="w-16 h-16 rounded-2xl bg-indigo-600/20 border border-indigo-500/20 flex items-center justify-center mx-auto mb-4">
+                <BookOpen className="w-8 h-8 text-indigo-400" />
+              </div>
               <h2 className="text-xl font-semibold text-slate-700 dark:text-slate-300 mb-2">Ready to study!</h2>
-              <p className="text-slate-500 text-sm max-w-md mx-auto">
+              <p className="text-slate-600 dark:text-slate-400 text-sm max-w-md mx-auto">
                 Ask questions about your documents, request a quiz, generate flashcards, or ask me to build a study plan.
               </p>
               <div className="flex flex-wrap gap-2 justify-center mt-6">
@@ -357,15 +397,16 @@ export default function SessionPage() {
                     msg.role === 'user' ? 'chat-user text-white' : 'chat-assistant text-slate-800 dark:text-slate-200'
                   }`}
                 >
-                  {msg.streaming ? (
-                    <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
-                      <Spinner size="sm" />
-                      <span>Thinking...</span>
-                    </span>
+                  {msg.role === 'user' ? (
+                    msg.content
                   ) : (
-                    <div className="prose dark:prose-invert prose-sm max-w-none leading-relaxed text-slate-800 dark:text-slate-200">
-                      <ReactMarkdown>{msg.content}</ReactMarkdown>
-                    </div>
+                    <StreamingMessage
+                      content={msg.content}
+                      streaming={!!msg.streaming}
+                      revisionSheet={msg.id === revisionSheetMsgId}
+                      exporting={exporting}
+                      onExportPDF={handleExportPDF}
+                    />
                   )}
                 </div>
               )}
@@ -387,8 +428,10 @@ export default function SessionPage() {
               <div className="glass border border-amber-500/30 rounded-2xl p-5 max-w-lg mx-auto">
                 {/* Verdict badge */}
                 <div className="flex items-center gap-2 mb-3">
-                  <span className="text-amber-400 text-lg">
-                    {pendingFallback.verdict === 'PARTIAL' ? '⚠️' : '❌'}
+                  <span className="text-amber-400">
+                    {pendingFallback.verdict === 'PARTIAL'
+                      ? <AlertTriangle className="w-5 h-5" />
+                      : <XCircle className="w-5 h-5 text-red-400" />}
                   </span>
                   <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
                     pendingFallback.verdict === 'PARTIAL'
@@ -403,7 +446,7 @@ export default function SessionPage() {
                 <p className="text-slate-800 dark:text-slate-200 text-sm font-medium mb-1">
                   {pendingFallback.message}
                 </p>
-                <p className="text-slate-500 text-xs mb-4 leading-relaxed">
+                <p className="text-slate-600 dark:text-slate-400 text-xs mb-4 leading-relaxed">
                   {pendingFallback.reason}
                 </p>
 

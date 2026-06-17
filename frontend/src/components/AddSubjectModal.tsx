@@ -57,7 +57,7 @@ export default function AddSubjectModal({ open, onClose, onCreate }: Props) {
 
         <div>
           <label className="block text-sm font-medium text-slate-700 dark:text-slate-700 dark:text-slate-300 mb-2">
-            Exam Date <span className="text-slate-500">(optional)</span>
+            Exam Date <span className="text-slate-600 dark:text-slate-400">(optional)</span>
           </label>
           <input
             type="date"

@@ -50,11 +50,19 @@ export interface Session {
   user_id: string;
   subject_id: string;
   documents_used: string[];
+  topics: string[];
   status: 'active' | 'completed' | 'interrupted';
   started_at: string;
   ended_at: string | null;
   summary: string | null;
   transcript: TranscriptMessage[];
+  evaluator_scores?: {
+    topics_covered: string[];
+    depth: Record<string, string>;
+    weak_moments: string[];
+    strong_areas: string[];
+    session_score: number;
+  } | null;
 }
 
 export interface Flashcard {

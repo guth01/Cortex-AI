@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { CalendarDays, Check, X } from 'lucide-react';
 import type { StudyPlanEvent } from '@/types';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
@@ -31,10 +32,12 @@ export default function StudyPlanConfirm({ events, sessionId, onConfirm, onRejec
         className="w-full flex items-center justify-between p-4 hover:bg-indigo-500/5 transition-colors"
       >
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-indigo-600/30 flex items-center justify-center text-lg">📅</div>
+          <div className="w-8 h-8 rounded-lg bg-indigo-600/30 flex items-center justify-center">
+            <CalendarDays className="w-4 h-4 text-indigo-400" />
+          </div>
           <div className="text-left">
             <p className="font-semibold text-slate-800 dark:text-slate-200 text-sm">Study Plan Ready</p>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-600 dark:text-slate-400">
               {events.length} sessions · {totalHours.toFixed(1)}h total
             </p>
           </div>
@@ -54,10 +57,10 @@ export default function StudyPlanConfirm({ events, sessionId, onConfirm, onRejec
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-[#1f2d4a]">
-                  <th className="text-left text-slate-500 font-medium px-4 py-2">Date</th>
-                  <th className="text-left text-slate-500 font-medium px-4 py-2">Topic</th>
-                  <th className="text-left text-slate-500 font-medium px-4 py-2">Duration</th>
-                  <th className="text-left text-slate-500 font-medium px-4 py-2">Coverage</th>
+                  <th className="text-left text-slate-600 dark:text-slate-400 font-medium px-4 py-2">Date</th>
+                  <th className="text-left text-slate-600 dark:text-slate-400 font-medium px-4 py-2">Topic</th>
+                  <th className="text-left text-slate-600 dark:text-slate-400 font-medium px-4 py-2">Duration</th>
+                  <th className="text-left text-slate-600 dark:text-slate-400 font-medium px-4 py-2">Coverage</th>
                 </tr>
               </thead>
               <tbody>
@@ -79,11 +82,11 @@ export default function StudyPlanConfirm({ events, sessionId, onConfirm, onRejec
 
           {/* Actions */}
           <div className="flex gap-3 p-4 border-t border-indigo-500/20">
-            <Button variant="success" loading={loading} onClick={onConfirm} className="flex-1">
-              ✓ Add to Google Calendar
+            <Button variant="success" loading={loading} onClick={onConfirm} className="flex-1 flex items-center justify-center gap-2">
+              <Check className="w-4 h-4" /> Add to Google Calendar
             </Button>
-            <Button variant="danger" onClick={onReject} disabled={loading} className="flex-1">
-              ✕ Reject Plan
+            <Button variant="danger" onClick={onReject} disabled={loading} className="flex-1 flex items-center justify-center gap-2">
+              <X className="w-4 h-4" /> Reject Plan
             </Button>
           </div>
         </div>
