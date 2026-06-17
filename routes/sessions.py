@@ -102,10 +102,40 @@ async def start_session(
 
         total_chunks = 0
         for doc in documents:
-            # Load document with LangChain
-            lc_docs = await asyncio.to_thread(
-                load_documents, doc["file_path"], doc["source_type"]
-            )
+            # Check if file_path is a URL (Cloudinary)
+            file_path_to_load = doc["file_path"]
+            is_temp = False
+            
+            if file_path_to_load.startswith("http"):
+                import tempfile
+                import httpx
+                import os
+                
+                suffix = f".{doc['source_type']}"
+                temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+                temp_file_path = temp_file.name
+                temp_file.close()
+                
+                async with httpx.AsyncClient() as client:
+                    resp = await client.get(file_path_to_load)
+                    resp.raise_for_status()
+                    with open(temp_file_path, "wb") as f:
+                        f.write(resp.content)
+                
+                file_path_to_load = temp_file_path
+                is_temp = True
+            
+            try:
+                # Load document with LangChain
+                lc_docs = await asyncio.to_thread(
+                    load_documents, file_path_to_load, doc["source_type"]
+                )
+            finally:
+                # Clean up temporary file
+                if is_temp:
+                    import os
+                    if os.path.exists(file_path_to_load):
+                        os.remove(file_path_to_load)
 
             # Add metadata to each page/section
             for lc_doc in lc_docs:

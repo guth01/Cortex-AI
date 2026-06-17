@@ -16,8 +16,18 @@ from routes.deps import get_db, get_current_user, serialize_mongo_doc
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
-# Upload configuration
-UPLOAD_DIR = Path("./uploads")
+import cloudinary
+import cloudinary.uploader
+import os
+
+# Cloudinary configuration
+cloudinary.config(
+    cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
+    api_key=os.getenv("CLOUDINARY_API_KEY"),
+    api_secret=os.getenv("CLOUDINARY_API_SECRET"),
+    secure=True,
+)
+
 MAX_FILE_SIZE = 20 * 1024 * 1024  # 20MB
 ALLOWED_EXTENSIONS = {"pdf", "docx", "md", "txt"}
 ALLOWED_CONTENT_TYPES = {
@@ -99,23 +109,28 @@ async def upload_document(
             detail="File is empty",
         )
 
-    # Create user-specific upload directory
-    user_upload_dir = UPLOAD_DIR / current_user["id"]
-    user_upload_dir.mkdir(parents=True, exist_ok=True)
-
-    # Generate unique filename
+    # Generate unique filename for Cloudinary
     file_uuid = str(uuid.uuid4())
-    unique_filename = f"{file_uuid}_{file.filename}"
-    file_path = user_upload_dir / unique_filename
+    public_id = f"{file_uuid}_{file.filename}"
+    folder_path = f"study_agent/{current_user['id']}"
 
-    # Save file to disk
+    # Upload to Cloudinary
     try:
-        with open(file_path, "wb") as f:
-            f.write(file_content)
+        # Use a thread so we don't block the async event loop
+        import asyncio
+        upload_result = await asyncio.to_thread(
+            cloudinary.uploader.upload,
+            file_content,
+            resource_type="auto",
+            folder=folder_path,
+            public_id=public_id
+        )
+        file_url = upload_result.get("secure_url")
+        cloudinary_public_id = upload_result.get("public_id")
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to save file: {str(e)}",
+            detail=f"Failed to upload file to Cloudinary: {str(e)}",
         )
 
     # Try to parse file to get page count (for PDFs)
@@ -123,7 +138,7 @@ async def upload_document(
     try:
         if file_ext == "pdf":
             import fitz
-            with fitz.open(file_path) as doc:
+            with fitz.open(stream=file_content, filetype="pdf") as doc:
                 page_count = len(doc)
     except Exception:
         pass  # Not critical if parsing fails
@@ -133,7 +148,8 @@ async def upload_document(
         "user_id": current_user["id"],
         "subject_id": subject_id,
         "filename": file.filename,
-        "file_path": str(file_path),
+        "file_path": file_url,
+        "cloudinary_public_id": cloudinary_public_id,
         "source_type": file_ext,
         "file_size": file_size,
         "uploaded_at": datetime.utcnow(),
@@ -200,11 +216,20 @@ async def delete_document(
             detail="Document not found or you don't have permission to delete it",
         )
 
-    # Delete file from disk
-    file_path = Path(document["file_path"])
+    # Delete file from Cloudinary if public_id exists, else fallback to local delete (for older docs)
+    cloudinary_public_id = document.get("cloudinary_public_id")
+    file_path = document.get("file_path", "")
+    
     try:
-        if file_path.exists():
-            file_path.unlink()
+        if cloudinary_public_id:
+            import asyncio
+            await asyncio.to_thread(cloudinary.uploader.destroy, cloudinary_public_id)
+            print(f"[CLOUDINARY] Deleted {cloudinary_public_id}")
+        else:
+            # Fallback for old local files
+            local_path = Path(file_path)
+            if local_path.exists():
+                local_path.unlink()
     except Exception as e:
         print(f"Warning: Failed to delete file {file_path}: {e}")
 

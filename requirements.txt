@@ -48,3 +48,4 @@ tavily-python>=0.5.0   # Tavily web search (fallback strategy)
 langdetect==1.0.9
 slowapi==0.1.9
 reportlab>=4.0.0  # PDF generation for revision sheet export
+cloudinary==1.38.0
