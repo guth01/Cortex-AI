@@ -18,7 +18,7 @@ export default function SessionHistoryPage() {
   const [session, setSession] = useState<Session | null>(null);
   const [subjectName, setSubjectName] = useState('');
   const [loading, setLoading] = useState(true);
-  const [exporting, setExporting] = useState(false);
+
 
   useEffect(() => {
     const load = async () => {
