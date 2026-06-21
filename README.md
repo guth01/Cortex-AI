@@ -222,9 +222,3 @@ study-agent/
 Pull requests are welcome. For major changes, please open an issue first to discuss what you'd like to change.
 
 ---
-
-<div align="center">
-
-Built with ❤️ using LangGraph, FastAPI, and the Gemini API
-
-</div>
