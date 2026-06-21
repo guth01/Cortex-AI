@@ -200,7 +200,7 @@ study-agent/
 │   ├── chat.py             # Chat endpoint (drives the LangGraph agent)
 │   ├── documents.py        # Upload, list, delete documents
 │   ├── sessions.py         # Start, end, list sessions
-│   ├── flashcards.py       # List flashcards, SM-2 review
+│   ├── flashcards.py       # List flashcards
 │   ├── export.py           # PDF revision sheet export
 │   └── google_oauth.py     # Google OAuth flow
 ├── db/
