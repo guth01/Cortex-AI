@@ -1,20 +1,138 @@
-"""
-Session routes — start, end, get, list sessions.
-"""
-
 from datetime import datetime
 from typing import List, Optional
 import asyncio
+import os
+import time
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
+import cloudinary
+import cloudinary.utils
 
 from models import SessionCreate, SessionStartResponse, SessionResponse, SessionEndResponse
 from routes.deps import get_db, get_current_user, serialize_mongo_doc
 from utils.file_parser import load_documents
 from utils.chunker import split_documents, split_documents_document_aware
 from db.chroma import create_session_collection, delete_session_collection
+
+# Configure Cloudinary (uses same env vars as documents.py)
+cloudinary.config(
+    cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
+    api_key=os.getenv("CLOUDINARY_API_KEY"),
+    api_secret=os.getenv("CLOUDINARY_API_SECRET"),
+    secure=True,
+)
+
+
+def _get_cloudinary_download_url(doc: dict) -> str:
+    """
+    Generate an authenticated Cloudinary download URL.
+    Uses private_download_url for API-level auth that bypasses CDN delivery restrictions.
+    """
+    public_id = doc.get("cloudinary_public_id")
+    file_url = doc.get("file_path", "")
+    source_type = doc.get("source_type", "pdf")
+
+    if not public_id:
+        return file_url
+
+    # Determine resource type from the stored URL to handle legacy uploads
+    if "/image/upload/" in file_url:
+        resource_type = "image"
+    elif "/raw/upload/" in file_url:
+        resource_type = "raw"
+    else:
+        resource_type = "raw"
+
+    # IMPORTANT: Use time.time() for correct POSIX timestamp.
+    # datetime.utcnow().timestamp() is a Python trap — .timestamp() interprets
+    # naive datetimes as local time, producing wrong results in non-UTC timezones.
+    download_url = cloudinary.utils.private_download_url(
+        public_id,
+        source_type,
+        resource_type=resource_type,
+        expires_at=int(time.time()) + 3600,
+    )
+    return download_url
+
+
+async def _download_cloudinary_file(doc: dict, dest_path: str) -> None:
+    """
+    Download a Cloudinary-hosted file to a local path.
+    
+    Strategy order:
+      1. Direct URL — works for raw/upload resources (no PDF restriction)
+      2. Archive download — uses Cloudinary's generate_archive API which runs
+         server-side and bypasses CDN delivery restrictions entirely.
+         Downloads a zip containing the file, then extracts it.
+    """
+    import httpx
+    import zipfile
+    import io
+
+    file_url = doc.get("file_path", "")
+    public_id = doc.get("cloudinary_public_id")
+
+    # Determine resource type from stored URL
+    if "/image/upload/" in file_url:
+        resource_type = "image"
+    elif "/raw/upload/" in file_url:
+        resource_type = "raw"
+    else:
+        resource_type = "raw"
+
+    async with httpx.AsyncClient(follow_redirects=True, timeout=120.0) as client:
+
+        # Strategy 1: Direct URL (works for raw/upload — no PDF restriction)
+        try:
+            print(f"[CLOUDINARY] Trying direct_url: {file_url[:100]}...")
+            resp = await client.get(file_url)
+            resp.raise_for_status()
+            with open(dest_path, "wb") as f:
+                f.write(resp.content)
+            print(f"[CLOUDINARY] ✓ Downloaded via direct_url ({len(resp.content)} bytes)")
+            return
+        except Exception as e:
+            print(f"[CLOUDINARY] ✗ direct_url failed: {e}")
+
+        # Strategy 2: Archive download (bypasses all CDN restrictions)
+        if public_id:
+            try:
+                print(f"[CLOUDINARY] Trying archive download for: {public_id}")
+                archive_url = cloudinary.utils.download_archive_url(
+                    public_ids=[public_id],
+                    resource_type=resource_type,
+                    target_format="zip",
+                    flatten_folders=True,
+                )
+                print(f"[CLOUDINARY] Archive URL: {archive_url[:100]}...")
+                resp = await client.get(archive_url)
+                resp.raise_for_status()
+
+                # Extract the file from the zip archive
+                zip_buffer = io.BytesIO(resp.content)
+                with zipfile.ZipFile(zip_buffer) as zf:
+                    file_list = zf.namelist()
+                    if not file_list:
+                        raise Exception("Empty archive received from Cloudinary")
+                    # Take the first (and should be only) file in the archive
+                    print(f"[CLOUDINARY] Archive contains: {file_list}")
+                    with zf.open(file_list[0]) as src, open(dest_path, "wb") as dst:
+                        dst.write(src.read())
+
+                file_size = os.path.getsize(dest_path)
+                print(f"[CLOUDINARY] ✓ Downloaded via archive ({file_size} bytes)")
+                return
+            except Exception as e:
+                print(f"[CLOUDINARY] ✗ archive download failed: {e}")
+
+    raise Exception(
+        f"All Cloudinary download strategies failed for document '{doc.get('filename', 'unknown')}'. "
+        f"This file was uploaded as resource_type='{resource_type}' which restricts PDF delivery. "
+        f"Please delete and re-upload this document to fix the issue."
+    )
+
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -108,19 +226,14 @@ async def start_session(
             
             if file_path_to_load.startswith("http"):
                 import tempfile
-                import httpx
-                import os
                 
                 suffix = f".{doc['source_type']}"
                 temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
                 temp_file_path = temp_file.name
                 temp_file.close()
                 
-                async with httpx.AsyncClient() as client:
-                    resp = await client.get(file_path_to_load)
-                    resp.raise_for_status()
-                    with open(temp_file_path, "wb") as f:
-                        f.write(resp.content)
+                # Download from Cloudinary with fallback strategies
+                await _download_cloudinary_file(doc, temp_file_path)
                 
                 file_path_to_load = temp_file_path
                 is_temp = True

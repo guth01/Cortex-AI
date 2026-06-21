@@ -118,10 +118,11 @@ async def upload_document(
     try:
         # Use a thread so we don't block the async event loop
         import asyncio
+        resource_type = "raw" if file_ext in ["pdf", "docx", "md", "txt", "csv"] else "auto"
         upload_result = await asyncio.to_thread(
             cloudinary.uploader.upload,
             file_content,
-            resource_type="auto",
+            resource_type=resource_type,
             folder=folder_path,
             public_id=public_id
         )
