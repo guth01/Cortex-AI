@@ -9,7 +9,6 @@ import os
 from dotenv import load_dotenv
 
 from cleanup import cleanup_orphaned_sessions
-from utils.embedder import load_model as load_embedder_model
 from db.chroma import get_chroma_client
 from routes.deps import set_database
 from routes.auth import router as auth_router

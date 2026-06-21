@@ -1,51 +1,61 @@
 """
-Embedder utility using LangChain's HuggingFaceEmbeddings.
+Embedder utility using Google Gemini text-embedding-004 via API.
 
-Wraps sentence-transformers/all-MiniLM-L6-v2 for 384-dimensional embeddings.
-Loaded once on startup and reused throughout the application.
+Uses the Gemini API for embeddings — no local model download needed.
+Model: text-embedding-004 (768 dimensions, optimized for retrieval).
+Uses a dedicated API key (GEMINI_EMBEDDING_API_KEY) to avoid rate-limit
+conflicts with the chat/LLM keys.
 """
 
+import os
 from typing import List, Union
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
 
-# Global instance (loaded once on startup)
-_embeddings: HuggingFaceEmbeddings = None
-MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+# Global instance (initialized lazily on first use)
+_embeddings: GoogleGenerativeAIEmbeddings = None
+MODEL_NAME = "models/gemini-embedding-001"
 
 
-def load_model() -> HuggingFaceEmbeddings:
+def load_model() -> GoogleGenerativeAIEmbeddings:
     """
-    Load the embedding model into memory.
+    Initialize the Gemini embedding model (API-based, no local download).
 
-    This should be called once during server startup.
-    First run will download ~90MB model file.
+    Uses GEMINI_EMBEDDING_API_KEY from environment.
+    This should be called once during server startup or lazily on first use.
     """
     global _embeddings
 
     if _embeddings is None:
-        print(f"[EMBEDDER] Loading model: {MODEL_NAME}")
-        _embeddings = HuggingFaceEmbeddings(
-            model_name=MODEL_NAME,
-            model_kwargs={'device': 'cpu'},
-            encode_kwargs={'normalize_embeddings': True},
+        api_key = os.getenv("GEMINI_EMBEDDING_API_KEY")
+        if not api_key:
+            raise RuntimeError(
+                "GEMINI_EMBEDDING_API_KEY not set in environment. "
+                "Please add it to your .env file."
+            )
+
+        print(f"[EMBEDDER] Initializing Gemini API embeddings: {MODEL_NAME}")
+        _embeddings = GoogleGenerativeAIEmbeddings(
+            model=MODEL_NAME,
+            google_api_key=api_key,
+            task_type="retrieval_document",
         )
-        # Warm up with a test embedding
+        # Warm up with a test embedding to verify the API key works
         _embeddings.embed_query("test")
-        print("[EMBEDDER] Model loaded successfully!")
+        print("[EMBEDDER] ✓ Gemini embeddings ready!")
 
     return _embeddings
 
 
-def get_embeddings() -> HuggingFaceEmbeddings:
+def get_embeddings() -> GoogleGenerativeAIEmbeddings:
     """
     Get the global embeddings instance.
 
     Returns:
-        Loaded HuggingFaceEmbeddings instance
+        Loaded GoogleGenerativeAIEmbeddings instance
 
     Raises:
-        RuntimeError: If model hasn't been loaded yet
+        RuntimeError: If API key is missing or invalid
     """
     if _embeddings is None:
         load_model()
@@ -90,5 +100,5 @@ def embed_batch(
 
 
 def get_embedding_dimension() -> int:
-    """Get the dimensionality of the embedding vectors (384 for all-MiniLM-L6-v2)."""
-    return 384
+    """Get the dimensionality of the embedding vectors (768 for text-embedding-004)."""
+    return 768
