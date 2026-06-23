@@ -80,7 +80,7 @@ export default function DashboardPage() {
                 </p>
               </div>
             </div>
-            <button onClick={() => setOauthSuccess(null)} className="text-slate-600 dark:text-slate-400 hover:text-slate-700 dark:text-slate-700 dark:text-slate-300">
+            <button onClick={() => setOauthSuccess(null)} className="text-slate-600 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>
@@ -106,7 +106,7 @@ export default function DashboardPage() {
 
         {/* Subjects grid */}
         <section className="mb-10">
-          <h2 className="text-lg font-semibold text-slate-700 dark:text-slate-700 dark:text-slate-300 mb-4">
+          <h2 className="text-lg font-semibold text-slate-700 dark:text-slate-300 mb-4">
             Your Subjects
             <span className="ml-2 text-sm text-slate-600 font-normal">({subjects.length})</span>
           </h2>
@@ -127,7 +127,7 @@ export default function DashboardPage() {
           ) : subjects.length === 0 ? (
             <div
               onClick={() => setAddModal(true)}
-              className="border-2 border-dashed border-slate-200 dark:border-[#1f2d4a] rounded-2xl p-12 text-center cursor-pointer hover:border-indigo-500/50 hover:bg-[#111827] transition-all"
+              className="border-2 border-dashed border-slate-200 dark:border-[#1f2d4a] rounded-2xl p-12 text-center cursor-pointer hover:border-indigo-500/50 hover:bg-slate-50 dark:hover:bg-[#111827] transition-all"
             >
               <div className="flex items-center justify-center mb-3">
                 <BookOpen className="w-10 h-10 text-slate-600" />
@@ -147,7 +147,7 @@ export default function DashboardPage() {
               {/* Add new card */}
               <button
                 onClick={() => setAddModal(true)}
-                className="h-full min-h-[180px] border-2 border-dashed border-slate-200 dark:border-[#1f2d4a] rounded-xl p-5 text-center hover:border-indigo-500/50 hover:bg-[#111827] transition-all flex flex-col items-center justify-center gap-2 text-slate-600 hover:text-slate-600 dark:text-slate-400"
+                className="h-full min-h-[180px] border-2 border-dashed border-slate-200 dark:border-[#1f2d4a] rounded-xl p-5 text-center hover:border-indigo-500/50 hover:bg-slate-50 dark:hover:bg-[#111827] transition-all flex flex-col items-center justify-center gap-2 text-slate-600 dark:text-slate-400 dark:hover:text-slate-300"
               >
                 <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
@@ -161,7 +161,7 @@ export default function DashboardPage() {
         {/* Recent sessions */}
         <section>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-slate-700 dark:text-slate-700 dark:text-slate-300">Recent Sessions</h2>
+            <h2 className="text-lg font-semibold text-slate-700 dark:text-slate-300">Recent Sessions</h2>
             <Link href="/history" className="text-sm text-indigo-400 hover:text-indigo-300 transition-colors">
               View all →
             </Link>
@@ -181,12 +181,12 @@ export default function DashboardPage() {
                 <Link
                   key={session.id}
                   href={`/history/${session.id}`}
-                  className="block p-4 rounded-xl border border-slate-200 dark:border-[#1f2d4a] bg-[#161d2e] hover:border-[#2a3a5c] hover:bg-[#1a2235] transition-all"
+                  className="block p-4 rounded-xl border border-slate-200 dark:border-[#1f2d4a] bg-white dark:bg-[#161d2e] hover:border-slate-300 dark:hover:border-[#2a3a5c] hover:bg-slate-50 dark:hover:bg-[#1a2235] transition-all"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <Badge color="green">Completed</Badge>
-                      <span className="text-slate-700 dark:text-slate-700 dark:text-slate-300 text-sm font-medium">
+                      <span className="text-slate-700 dark:text-slate-300 text-sm font-medium">
                         {subjectMap[session.subject_id] ?? 'Unknown Subject'}
                       </span>
                     </div>

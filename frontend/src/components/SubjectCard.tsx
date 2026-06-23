@@ -37,7 +37,7 @@ export default function SubjectCard({ subject, onDelete, onStartSession }: Props
 
   return (
     <div className="gradient-border group cursor-pointer p-px rounded-xl">
-      <div className="bg-[#161d2e] rounded-xl p-5 h-full flex flex-col gap-4 transition-colors group-hover:bg-[#1a2235]">
+      <div className="bg-white dark:bg-[#161d2e] rounded-xl p-5 h-full flex flex-col gap-4 transition-colors hover:bg-slate-50 dark:group-hover:bg-[#1a2235]">
         {/* Header */}
         <div className="flex items-start justify-between">
           <div className="flex-1 min-w-0">

@@ -55,7 +55,7 @@ export default function DropzoneUpload({ subjectId, onUpload }: Props) {
             ? 'border-red-500 bg-red-500/5'
             : isDragActive
             ? 'border-indigo-500 bg-indigo-500/10 scale-[1.01]'
-            : 'border-slate-200 dark:border-[#1f2d4a] bg-slate-50 dark:bg-[#0f1623] hover:border-indigo-500/50 hover:bg-[#111827]'
+            : 'border-slate-200 dark:border-[#1f2d4a] bg-slate-50 dark:bg-[#0f1623] hover:border-indigo-500/50 hover:bg-slate-100 dark:hover:bg-[#111827]'
           }
         `}
       >
@@ -76,7 +76,7 @@ export default function DropzoneUpload({ subjectId, onUpload }: Props) {
               <UploadCloud className="w-6 h-6 text-indigo-400" />
             </div>
             <div>
-              <p className="text-slate-700 dark:text-slate-700 dark:text-slate-300 font-medium">Drag & drop files here</p>
+              <p className="text-slate-700 dark:text-slate-300 font-medium">Drag & drop files here</p>
               <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">or click to browse</p>
             </div>
             <p className="text-xs text-slate-600">PDF, DOCX, MD, TXT · up to 20MB each</p>

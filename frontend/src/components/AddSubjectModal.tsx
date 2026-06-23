@@ -42,7 +42,7 @@ export default function AddSubjectModal({ open, onClose, onCreate }: Props) {
     <Modal open={open} onClose={onClose} title="Add New Subject">
       <form onSubmit={handleSubmit} className="space-y-5">
         <div>
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-700 dark:text-slate-300 mb-2">
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
             Subject Name <span className="text-red-400">*</span>
           </label>
           <input
@@ -56,7 +56,7 @@ export default function AddSubjectModal({ open, onClose, onCreate }: Props) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-700 dark:text-slate-300 mb-2">
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
             Exam Date <span className="text-slate-600 dark:text-slate-400">(optional)</span>
           </label>
           <input

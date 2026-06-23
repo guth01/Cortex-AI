@@ -38,14 +38,14 @@ export default function FlashCardComponent({ card, onMarkDone }: Props) {
       >
         <div className="flip-card-inner">
           {/* Front — question */}
-          <div className="flip-card-front bg-[#161d2e] border border-slate-200 dark:border-[#1f2d4a] p-6 flex flex-col items-center justify-center text-center">
+          <div className="flip-card-front bg-white dark:bg-[#161d2e] border border-slate-200 dark:border-[#1f2d4a] p-6 flex flex-col items-center justify-center text-center">
             <p className="text-xs text-indigo-400 font-medium mb-3 uppercase tracking-wide">Question</p>
             <p className="text-slate-900 dark:text-slate-100 text-base font-medium leading-relaxed">{card.question}</p>
             <p className="text-xs text-slate-600 mt-4">Click to reveal answer</p>
           </div>
 
           {/* Back — answer */}
-          <div className="flip-card-back bg-gradient-to-br from-indigo-900/40 to-purple-900/30 border border-indigo-500/30 p-6 flex flex-col items-center justify-center text-center">
+          <div className="flip-card-back bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/40 dark:to-purple-900/30 border border-indigo-200 dark:border-indigo-500/30 p-6 flex flex-col items-center justify-center text-center">
             <p className="text-xs text-purple-400 font-medium mb-3 uppercase tracking-wide">Answer</p>
             <p className="text-slate-900 dark:text-slate-100 text-base leading-relaxed">{card.answer}</p>
           </div>

@@ -66,8 +66,8 @@ export default function StudyPlanConfirm({ events, onConfirm, onReject, loading 
               <tbody>
                 {events.map((ev, i) => (
                   <tr key={i} className="border-b border-slate-200 dark:border-[#1f2d4a]/50 hover:bg-[#1e2640]/30">
-                    <td className="px-4 py-2 text-slate-700 dark:text-slate-700 dark:text-slate-300 whitespace-nowrap">{ev.date}</td>
-                    <td className="px-4 py-2 text-slate-700 dark:text-slate-700 dark:text-slate-300">{ev.topic}</td>
+                    <td className="px-4 py-2 text-slate-700 dark:text-slate-300 whitespace-nowrap">{ev.date}</td>
+                    <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{ev.topic}</td>
                     <td className="px-4 py-2 text-slate-600 dark:text-slate-400 whitespace-nowrap">{ev.duration_minutes}min</td>
                     <td className="px-4 py-2">
                       <Badge color={ev.coverage_level ? coverageColors[ev.coverage_level] ?? 'slate' : 'slate'}>

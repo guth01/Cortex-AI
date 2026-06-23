@@ -49,7 +49,7 @@ export default function DocumentList({ documents, selectedIds, onToggle, onDelet
               ${showCheckboxes ? 'cursor-pointer' : ''}
               ${isSelected
                 ? 'border-indigo-500/60 bg-indigo-500/10'
-                : 'border-slate-200 dark:border-[#1f2d4a] bg-[#161d2e] hover:border-[#2a3a5c]'
+                : 'border-slate-200 dark:border-[#1f2d4a] bg-white dark:bg-[#161d2e] hover:border-slate-300 dark:hover:border-[#2a3a5c] hover:bg-slate-50 dark:hover:bg-transparent'
               }
             `}
           >
